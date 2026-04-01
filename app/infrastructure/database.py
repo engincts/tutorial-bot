@@ -22,11 +22,18 @@ class Base(DeclarativeBase):
 
 def build_engine(settings: Settings) -> AsyncEngine:
     return create_async_engine(
-        settings.postgres_dsn,
+        f"postgresql+asyncpg:///{settings.postgres_db}",
         pool_size=10,
         max_overflow=20,
         pool_pre_ping=True,
         echo=(settings.app_env.value == "development"),
+        connect_args={
+            "host": settings.postgres_host,
+            "port": settings.postgres_port,
+            "user": settings.postgres_user,
+            "password": settings.postgres_password,
+            "ssl": "require",
+        },
     )
 
 
