@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[project]
+name = "tutor-bot"
+version = "0.1.0"
+description = "RAG-based personal education bot with persistent learner profiling"
+requires-python = ">=3.11"
+dependencies = [
+    # Web framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-multipart>=0.0.9",
+
+    # Config & validation
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "python-dotenv>=1.0.0",
+
+    # Database
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.0",
+    "pgvector>=0.3.0",
+
+    # Redis (session cache)
+    "redis[hiredis]>=5.0.0",
+
+    # LLM providers
+    "openai>=1.30.0",
+    "anthropic>=0.28.0",
+
+    # Embeddings
+    "sentence-transformers>=3.0.0",
+    "torch>=2.3.0",
+
+    # Text processing
+    "tiktoken>=0.7.0",
+    "pypdf>=4.2.0",
+    "python-docx>=1.1.0",
+    "markdown-it-py>=3.0.0",
+
+    # Async utilities
+    "httpx>=0.27.0",
+    "tenacity>=8.3.0",
+
+    # Knowledge tracing (PyTorch tabanlı)
+    "numpy>=1.26.0",
+    "scikit-learn>=1.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "httpx>=0.27.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "ANN"]
+ignore = ["ANN101", "ANN102"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

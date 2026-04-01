@@ -1,0 +1,82 @@
+"""
+Content retriever — kullanıcı sorgusuna semantik olarak en yakın
+curriculum chunk'larını getirir.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.infrastructure.embedder_factory import BaseEmbedder
+from app.infrastructure.pg_vector_store import ContentChunk, PgVectorStore
+
+
+@dataclass
+class RetrievedChunk:
+    document_id: str
+    chunk_index: int
+    content: str
+    heading: str
+    kc_tags: list[str]
+
+
+class ContentRetriever:
+    def __init__(
+        self,
+        embedder: BaseEmbedder,
+        vector_store: PgVectorStore,
+        top_k: int = 5,
+    ) -> None:
+        self._embedder = embedder
+        self._store = vector_store
+        self._top_k = top_k
+
+    async def retrieve(
+        self,
+        session: AsyncSession,
+        query: str,
+        kc_filter: list[str] | None = None,
+        top_k: int | None = None,
+    ) -> list[RetrievedChunk]:
+        """
+        Sorguyu embed eder ve pgvector'dan en yakın chunk'ları getirir.
+        kc_filter verilirse sadece o KC etiketlerini içeren chunk'ları döner.
+        """
+        query_embedding = await self._embedder.embed(query)
+        k = top_k or self._top_k
+
+        raw_chunks: list[ContentChunk] = await self._store.search_content(
+            session=session,
+            query_embedding=query_embedding,
+            top_k=k,
+            kc_filter=kc_filter,
+        )
+
+        return [self._to_retrieved(c) for c in raw_chunks]
+
+    def to_prompt_context(self, chunks: list[RetrievedChunk]) -> str:
+        """Prompt'a eklenecek kaynak içeriği formatlar."""
+        if not chunks:
+            return ""
+        parts = ["İlgili kaynak içeriği:"]
+        for i, chunk in enumerate(chunks, 1):
+            heading_prefix = f"[{chunk.heading}] " if chunk.heading else ""
+            parts.append(f"\n--- Kaynak {i} ({chunk.document_id}) ---")
+            parts.append(f"{heading_prefix}{chunk.content}")
+        return "\n".join(parts)
+
+    @staticmethod
+    def _to_retrieved(chunk: ContentChunk) -> RetrievedChunk:
+        import json
+        try:
+            meta = json.loads(chunk.metadata_ or "{}")
+        except Exception:
+            meta = {}
+        return RetrievedChunk(
+            document_id=chunk.document_id,
+            chunk_index=chunk.chunk_index,
+            content=chunk.content,
+            heading=meta.get("heading", ""),
+            kc_tags=chunk.kc_tags or [],
+        )

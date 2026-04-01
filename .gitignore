@@ -1,0 +1,81 @@
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────────
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ── Environment & secrets ─────────────────────────────────────
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ── Testing & coverage ────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+coverage.xml
+*.cover
+
+# ── Type checking ─────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyright/
+
+# ── Linting ───────────────────────────────────────────────────
+.ruff_cache/
+
+# ── IDE & editors ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Docker ────────────────────────────────────────────────────
+.dockerignore
+
+# ── Model checkpoints (büyük binary dosyalar) ─────────────────
+checkpoints/*.pt
+checkpoints/*.bin
+checkpoints/*.safetensors
+checkpoints/*.ckpt
+!checkpoints/.gitkeep
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Alembic runtime ───────────────────────────────────────────
+# (alembic.ini'yi commit'liyoruz ama local override'ları değil)
+alembic_local.ini
+
+# ── Jupyter ───────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Misc ──────────────────────────────────────────────────────
+*.pid
+*.seed
+*.tmp
+.cache/
