@@ -74,6 +74,9 @@ alembic_local.ini
 .ipynb_checkpoints/
 *.ipynb
 
+# ── Claude Code ───────────────────────────────────────────────
+.claude/
+
 # ── Misc ──────────────────────────────────────────────────────
 *.pid
 *.seed
