@@ -12,6 +12,9 @@ def build_llm_client(settings: Settings | None = None) -> BaseLLMClient:
     if settings.llm_provider == LLMProvider.ANTHROPIC:
         from app.infrastructure.llm.anthropic_client import AnthropicClient
         return AnthropicClient(settings)
+    if settings.llm_provider == LLMProvider.NOVITA:
+        from app.infrastructure.llm.novita_client import NovitaClient
+        return NovitaClient(settings)
     raise ValueError(f"Bilinmeyen LLM_PROVIDER: {settings.llm_provider}")
 
 

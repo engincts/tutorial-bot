@@ -27,7 +27,7 @@ _EMBEDDING_DIM = int(__import__("os").environ.get("EMBEDDING_DIM", "1024"))
 
 
 class ContentChunk(Base):
-    __tablename__ = "content_chunks"
+    __tablename__ = "curriculum_chunks"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -46,7 +46,7 @@ class ContentChunk(Base):
 
 
 class InteractionEmbedding(Base):
-    __tablename__ = "interaction_embeddings"
+    __tablename__ = "chat_history"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -124,7 +124,7 @@ class PgVectorStore:
     async def delete_document(self, session: AsyncSession, document_id: str) -> int:
         """Bir dökümana ait tüm chunk'ları siler. Kaç satır silindiğini döner."""
         result = await session.execute(
-            text("DELETE FROM content_chunks WHERE document_id = :doc_id")
+            text("DELETE FROM curriculum_chunks WHERE document_id = :doc_id")
             .bindparams(doc_id=document_id)
         )
         return result.rowcount  # type: ignore[attr-defined]
@@ -203,16 +203,16 @@ class PgVectorStore:
         """
         await session.execute(
             text("""
-                CREATE INDEX IF NOT EXISTS content_chunks_embedding_hnsw
-                ON content_chunks
+                CREATE INDEX IF NOT EXISTS curriculum_chunks_embedding_hnsw
+                ON curriculum_chunks
                 USING hnsw (embedding vector_cosine_ops)
                 WITH (m = 16, ef_construction = 64)
             """)
         )
         await session.execute(
             text("""
-                CREATE INDEX IF NOT EXISTS interaction_embeddings_hnsw
-                ON interaction_embeddings
+                CREATE INDEX IF NOT EXISTS chat_history_embedding_hnsw
+                ON chat_history
                 USING hnsw (embedding vector_cosine_ops)
                 WITH (m = 16, ef_construction = 64)
             """)

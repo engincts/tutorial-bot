@@ -1,0 +1,36 @@
+{
+  "app": {
+    "env": "development",
+    "log_level": "INFO"
+  },
+  "llm": {
+    "provider": "novita",
+    "openai_model": "gpt-4o",
+    "anthropic_model": "claude-sonnet-4-5",
+    "novita_model": "meta-llama/llama-3.1-8b-instruct"
+  },
+  "embedder": {
+    "provider": "novita",
+    "model": "BAAI/bge-m3",
+    "openai_model": "text-embedding-3-large",
+    "novita_model": "baai/bge-m3",
+    "dim": 1024
+  },
+  "redis": {
+    "url": "redis://localhost:6379/0",
+    "session_ttl_seconds": 3600
+  },
+  "knowledge_tracing": {
+    "model": "akt",
+    "model_path": "./checkpoints/akt_assistments.pt"
+  },
+  "retrieval": {
+    "content_top_k": 5,
+    "memory_top_k": 3,
+    "rerank_enabled": false
+  },
+  "pedagogy": {
+    "mastery_threshold_low": 0.4,
+    "mastery_threshold_high": 0.7
+  }
+}

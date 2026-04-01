@@ -14,8 +14,11 @@ Akış (her /chat request'inde):
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,6 +86,8 @@ class ChatOrchestrator:
         request: ChatRequest,
         db_session: AsyncSession,
     ) -> ChatResponse:
+        logger.info("chat | learner=%s session=%s", request.learner_id, request.session_id)
+
         # ── 1. Session + profil ───────────────────────────────────────
         ctx = await self._session_manager.get_or_create(
             session_id=request.session_id,
@@ -141,6 +146,8 @@ class ChatOrchestrator:
             conversation_history=ctx.to_conversation_history(n=6),
         )
 
+        logger.debug("pedagogy=%s kc_ids=%s", pedagogy_directive, kc_ids)
+
         # ── 7. LLM çağrısı ────────────────────────────────────────────
         llm_response: LLMResponse = await self._llm.complete(
             messages=messages,
@@ -165,6 +172,11 @@ class ChatOrchestrator:
             kc_tags=kc_ids,
         )
         self._memory_updater.fire_and_forget(interaction=interaction)
+
+        logger.info(
+            "chat done | model=%s in=%d out=%d",
+            llm_response.model, llm_response.input_tokens, llm_response.output_tokens,
+        )
 
         return ChatResponse(
             content=llm_response.content,

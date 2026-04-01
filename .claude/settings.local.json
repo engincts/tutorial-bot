@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -H \"Authorization: Bearer sbp_bfead28c778340cf1864db2db83345014be85415\" https://api.supabase.com/v1/projects/maffqoqbjcoxaqritqol)",
+      "Bash(docker compose:*)",
+      "Bash(curl -s -H \"Authorization: Bearer sbp_bfead28c778340cf1864db2db83345014be85415\" \"https://api.supabase.com/v1/projects/maffqoqbjcoxaqritqol\")",
+      "Bash(curl -s -X POST -H \"Authorization: Bearer sbp_bfead28c778340cf1864db2db83345014be85415\" -H \"Content-Type: application/json\" -d \"{\\\\\"password\\\\\": \\\\\"TutorBot2024\\\\\"}\" \"https://api.supabase.com/v1/projects/maffqoqbjcoxaqritqol/database/password\")"
+    ]
+  }
+}
