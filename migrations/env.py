@@ -23,7 +23,7 @@ import app.domain.knowledge_component  # noqa: F401
 target_metadata = Base.metadata
 
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.postgres_dsn_sync)
+config.set_main_option("sqlalchemy.url", settings.postgres_dsn)
 
 
 def run_migrations_offline() -> None:

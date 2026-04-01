@@ -9,6 +9,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+async def _run() -> None:
+    logger.info("Worker başlatıldı (standalone mod henüz implement edilmedi — idle bekliyor)")
+    while True:
+        await asyncio.sleep(60)
+
+
 if __name__ == "__main__":
-    logger.info("Worker başlatıldı (standalone mod henüz implement edilmedi)")
-    asyncio.run(asyncio.sleep(0))
+    asyncio.run(_run())

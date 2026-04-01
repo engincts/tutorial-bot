@@ -6,8 +6,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev && \
     rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[dev]"
+COPY pyproject.toml ./
+# Dummy app paketi — bağımlılıkları önce kur, kaynak değişince cache bozulmasın
+RUN mkdir -p app && touch app/__init__.py
+RUN pip install --no-cache-dir --timeout=120 --retries=5 ".[dev]"
 
 COPY . .
 

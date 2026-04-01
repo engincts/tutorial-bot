@@ -21,7 +21,7 @@ from app.infrastructure.database import Base
 # ── ORM Models (learner_profiles + kc_mastery) ────────────────────────────────
 
 class LearnerProfileORM(Base):
-    __tablename__ = "learner_profiles"
+    __tablename__ = "student_profiles"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -32,7 +32,7 @@ class LearnerProfileORM(Base):
 
 
 class KCMasteryORM(Base):
-    __tablename__ = "kc_mastery"
+    __tablename__ = "mastery_scores"
 
     learner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     kc_id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -42,7 +42,7 @@ class KCMasteryORM(Base):
 
 
 class MisconductORM(Base):
-    __tablename__ = "misconceptions"
+    __tablename__ = "student_errors"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     learner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
@@ -134,12 +134,12 @@ class ProfileRetriever:
         """Tek bir KC'nin mastery değerini günceller (upsert)."""
         await session.execute(
             text("""
-                INSERT INTO kc_mastery (learner_id, kc_id, p_mastery, attempts, last_interaction)
+                INSERT INTO mastery_scores (learner_id, kc_id, p_mastery, attempts, last_interaction)
                 VALUES (:learner_id, :kc_id, :p_mastery, 1, NOW())
                 ON CONFLICT (learner_id, kc_id)
                 DO UPDATE SET
                     p_mastery = :p_mastery,
-                    attempts = kc_mastery.attempts + 1,
+                    attempts = mastery_scores.attempts + 1,
                     last_interaction = NOW()
             """).bindparams(
                 learner_id=str(learner_id),

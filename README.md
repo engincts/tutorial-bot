@@ -30,32 +30,37 @@ POST /chat
 
 ```bash
 # 1. Ortam değişkenlerini ayarla
-cp .env.example .env
+cp .env.example .env          # Linux/Mac
+copy .env.example .env        # Windows
 # .env dosyasını düzenle — en azından OPENAI_API_KEY veya ANTHROPIC_API_KEY
 
 # 2. Servisleri ayağa kaldır (PostgreSQL + pgvector, Redis)
-make docker-up
+docker compose up -d --build
 
 # 3. Veritabanı migrasyonlarını uygula
-make migrate
+alembic upgrade head
 
 # 4. Örnek müfredat yükle
 python scripts/seed_curriculum.py
 
 # 5. API'yi başlat
-make dev
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+> **Not (Linux/Mac):** `make` kuruluysa yukarıdaki komutlar yerine `make docker-up`, `make migrate`, `make dev` kullanılabilir.
 
 ### Manuel Kurulum (Docker olmadan)
 
 ```bash
 python -m venv env
-source env/bin/activate          # Windows: env\Scripts\activate
+source env/bin/activate          # Linux/Mac
+env\Scripts\activate             # Windows
+
 pip install -r requirements.txt
 
 # PostgreSQL ve Redis'i lokal olarak başlat, sonra:
-make migrate
-make dev
+alembic upgrade head
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Konfigürasyon
@@ -143,10 +148,10 @@ curl -X POST http://localhost:8000/ingest/pdf \
 
 ```bash
 # Testleri çalıştır
-make test
+APP_ENV=test OPENAI_API_KEY=sk-test python -m pytest tests/unit/ -v
 
 # Lint
-make lint
+ruff check app/ tests/
 
 # Yeni migration oluştur
 alembic revision --autogenerate -m "migration_adi"

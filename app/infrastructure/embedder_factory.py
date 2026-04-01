@@ -92,6 +92,32 @@ class OpenAIEmbedder(BaseEmbedder):
         return 3072  # text-embedding-3-large varsayılan
 
 
+# ── Novita Embedder (OpenAI-compatible) ──────────────────────────────────────
+
+
+class NovitaEmbedder(BaseEmbedder):
+    def __init__(self, settings: Settings) -> None:
+        from openai import AsyncOpenAI
+        self._client = AsyncOpenAI(
+            api_key=settings.novita_api_key,
+            base_url="https://api.novita.ai/v3/openai",
+        )
+        self._model = settings.novita_embedding_model
+        self._dim = settings.embedding_dim
+
+    async def embed(self, text: str) -> list[float]:
+        response = await self._client.embeddings.create(input=text, model=self._model)
+        return response.data[0].embedding
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        response = await self._client.embeddings.create(input=texts, model=self._model)
+        return [item.embedding for item in response.data]
+
+    @property
+    def dim(self) -> int:
+        return self._dim
+
+
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 
@@ -101,6 +127,8 @@ def build_embedder(settings: Settings | None = None) -> BaseEmbedder:
         return BGEM3Embedder(model_name=settings.embedder_model)
     if settings.embedder_provider == EmbedderProvider.OPENAI:
         return OpenAIEmbedder(settings=settings)
+    if settings.embedder_provider == EmbedderProvider.NOVITA:
+        return NovitaEmbedder(settings=settings)
     raise ValueError(f"Bilinmeyen EMBEDDER_PROVIDER: {settings.embedder_provider}")
 
 

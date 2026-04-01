@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_chat_orchestrator
+from app.api.dependencies_auth import get_current_learner_id
 from app.infrastructure.database import get_session
 from app.services.orchestration.chat_orchestrator import ChatOrchestrator, ChatRequest
 
@@ -15,7 +16,6 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 class ChatIn(BaseModel):
-    learner_id: uuid.UUID
     session_id: uuid.UUID | None = None
     message: str
 
@@ -33,13 +33,14 @@ class ChatOut(BaseModel):
 @router.post("", response_model=ChatOut)
 async def chat(
     body: ChatIn,
+    learner_id: uuid.UUID = Depends(get_current_learner_id),
     orchestrator: ChatOrchestrator = Depends(get_chat_orchestrator),
     db: AsyncSession = Depends(get_session),
 ) -> ChatOut:
     session_id = body.session_id or uuid.uuid4()
     response = await orchestrator.chat(
         request=ChatRequest(
-            learner_id=body.learner_id,
+            learner_id=learner_id,
             session_id=session_id,
             message=body.message,
         ),

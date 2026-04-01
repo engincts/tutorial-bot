@@ -74,7 +74,7 @@ class MisconceptionStore:
     ) -> None:
         """Bir yanılgıyı çözümlendi olarak işaretle."""
         await session.execute(
-            text("UPDATE misconceptions SET resolved = true WHERE id = :mid")
+            text("UPDATE student_errors SET resolved = true WHERE id = :mid")
             .bindparams(mid=str(misconception_id))
         )
 
