@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from app.infrastructure.database import get_session, get_engine
+from app.infrastructure.database import get_session, get_engine, get_session_factory
 from app.infrastructure.embedder_factory import get_embedder
 from app.infrastructure.llm import get_llm_client
 from app.infrastructure.pg_vector_store import PgVectorStore
@@ -78,11 +78,10 @@ def get_session_manager() -> SessionManager:
 
 @lru_cache(maxsize=1)
 def get_memory_updater() -> MemoryUpdater:
-    from app.infrastructure.database import _session_factory
     embedder = get_embedder()
     vector_store = get_vector_store()
     return MemoryUpdater(
-        session_factory=_session_factory,
+        session_factory=get_session_factory(),
         interaction_logger=InteractionLogger(embedder=embedder, vector_store=vector_store),
         misconception_store=get_misconception_store(),
         profile_retriever=get_profile_retriever(),

@@ -100,15 +100,6 @@ class Settings(BaseSettings):
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def postgres_dsn_sync(self) -> str:
-        """Alembic migration'ları için sync DSN."""
-        return (
-            f"postgresql://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        )
-
     # ── Source priority: env vars > config.json > .env > defaults ────
     @classmethod
     def settings_customise_sources(

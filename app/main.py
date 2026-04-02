@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from app.api.routes import auth, chat, ingest, profile, session
 from app.infrastructure.database import close_db, init_db
@@ -37,7 +38,26 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
         docs_url="/docs" if settings.app_env.value != "production" else None,
+        swagger_ui_parameters={"persistAuthorization": True},
     )
+
+    def custom_openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            routes=app.routes,
+        )
+        schema.setdefault("components", {}).setdefault("securitySchemes", {})["HTTPBearer"] = {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+        }
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi
 
     app.add_middleware(
         CORSMiddleware,

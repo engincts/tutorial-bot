@@ -109,7 +109,7 @@ class ChatOrchestrator:
             self._vector_store.search_learner_memory(
                 db_session,
                 learner_id=request.learner_id,
-                query_embedding=await self._content_retriever._embedder.embed(request.message),
+                query_embedding=await self._content_retriever.embed(request.message),
                 top_k=self._settings.memory_top_k,
             )
         )

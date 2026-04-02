@@ -66,6 +66,13 @@ class BGEM3Embedder(BaseEmbedder):
 # ── OpenAI Embedder ───────────────────────────────────────────────────────────
 
 
+_OPENAI_EMBEDDING_DIMS: dict[str, int] = {
+    "text-embedding-3-large": 3072,
+    "text-embedding-3-small": 1536,
+    "text-embedding-ada-002": 1536,
+}
+
+
 class OpenAIEmbedder(BaseEmbedder):
     def __init__(self, settings: Settings) -> None:
         from openai import AsyncOpenAI
@@ -84,12 +91,11 @@ class OpenAIEmbedder(BaseEmbedder):
             input=texts,
             model=self._model,
         )
-        # OpenAI garantisi: sıra korunur
         return [item.embedding for item in response.data]
 
     @property
     def dim(self) -> int:
-        return 3072  # text-embedding-3-large varsayılan
+        return _OPENAI_EMBEDDING_DIMS.get(self._model, 1536)
 
 
 # ── Novita Embedder (OpenAI-compatible) ──────────────────────────────────────

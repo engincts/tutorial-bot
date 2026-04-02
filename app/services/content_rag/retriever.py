@@ -4,6 +4,7 @@ curriculum chunk'larını getirir.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,9 @@ class ContentRetriever:
         self._embedder = embedder
         self._store = vector_store
         self._top_k = top_k
+
+    async def embed(self, text: str) -> list[float]:
+        return await self._embedder.embed(text)
 
     async def retrieve(
         self,
@@ -68,7 +72,6 @@ class ContentRetriever:
 
     @staticmethod
     def _to_retrieved(chunk: ContentChunk) -> RetrievedChunk:
-        import json
         try:
             meta = json.loads(chunk.metadata_ or "{}")
         except Exception:
