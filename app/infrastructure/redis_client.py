@@ -59,3 +59,34 @@ class SessionCache:
 
     async def extend_ttl(self, session_id: str) -> None:
         await get_redis().expire(self._key(session_id), self._ttl)
+
+
+_WORKER_QUEUE_KEY = "worker:memory_queue"
+_WORKER_DLQ_KEY = "worker:memory_dlq"
+_DLQ_MAX_SIZE = 500
+
+
+class WorkerQueue:
+    """
+    Redis list tabanlı iş kuyruğu.
+    API: LPUSH (sol), Worker: BRPOP (sağ) — FIFO sırası.
+    Başarısız job'lar push_dead() ile DLQ'ya taşınır.
+    """
+
+    async def push(self, job: dict) -> None:
+        await get_redis().lpush(_WORKER_QUEUE_KEY, json.dumps(job, default=str))
+
+    async def pop(self, timeout: int = 5) -> dict | None:
+        result = await get_redis().brpop(_WORKER_QUEUE_KEY, timeout=timeout)
+        if result is None:
+            return None
+        _, raw = result
+        return json.loads(raw)
+
+    async def push_dead(self, job: dict, error: str) -> None:
+        """Başarısız job'u DLQ'ya yazar. Liste _DLQ_MAX_SIZE ile sınırlandırılır."""
+        import datetime
+        entry = {**job, "_error": error, "_failed_at": datetime.datetime.utcnow().isoformat()}
+        redis = get_redis()
+        await redis.lpush(_WORKER_DLQ_KEY, json.dumps(entry, default=str))
+        await redis.ltrim(_WORKER_DLQ_KEY, 0, _DLQ_MAX_SIZE - 1)

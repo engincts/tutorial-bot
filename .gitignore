@@ -77,6 +77,11 @@ alembic_local.ini
 # ── Claude Code ───────────────────────────────────────────────
 .claude/
 
+# ── Frontend ──────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
 # ── Misc ──────────────────────────────────────────────────────
 *.pid
 *.seed

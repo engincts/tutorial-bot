@@ -20,7 +20,10 @@ class SessionManager:
     ) -> SessionContext:
         data = await self._cache.get(str(session_id))
         if data:
-            return SessionContext.from_dict(data)
+            ctx = SessionContext.from_dict(data)
+            if ctx.learner_id != learner_id:
+                raise PermissionError(f"Session {session_id} bu kullanıcıya ait değil.")
+            return ctx
         ctx = SessionContext(session_id=session_id, learner_id=learner_id)
         await self._cache.set(str(session_id), ctx.to_dict())
         return ctx

@@ -6,9 +6,12 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.domain.knowledge_component import KCMasterySnapshot, KnowledgeComponent
 from app.services.knowledge_tracing.base import BaseKnowledgeTracer
 from app.services.knowledge_tracing.kc_mapper import KCMapper
+from app.services.learner_memory.profile_retriever import ProfileRetriever
 
 
 class MasteryEstimator:
@@ -16,29 +19,41 @@ class MasteryEstimator:
         self,
         tracer: BaseKnowledgeTracer,
         kc_mapper: KCMapper,
+        profile_retriever: ProfileRetriever,
     ) -> None:
         self._tracer = tracer
         self._mapper = kc_mapper
+        self._profile_retriever = profile_retriever
 
     async def estimate_for_query(
         self,
         learner_id: uuid.UUID,
         query: str,
         known_kc_ids: list[str] | None = None,
+        db_session: AsyncSession | None = None,
     ) -> tuple[list[str], KCMasterySnapshot]:
         """
         1. Sorgudan KC etiketleri çıkar
-        2. O KC'ler için mastery tahminleri al
-        3. KCMasterySnapshot döner
-
-        Dönüş: (kc_ids, snapshot)
+        2. DB'den mevcut mastery state'ini yükle (restart'tan kurtarır)
+        3. O KC'ler için mastery tahminleri al
+        4. KCMasterySnapshot döner
         """
-        # KC extraction + merge with known
         extracted = await self._mapper.extract(query)
-        kc_ids = list(dict.fromkeys((known_kc_ids or []) + extracted))  # dedup, sıra koru
+        kc_ids = list(dict.fromkeys((known_kc_ids or []) + extracted))
 
         if not kc_ids:
             return [], KCMasterySnapshot()
+
+        # DB'den mastery değerlerini yükleyip tracer'ı seed et
+        if db_session is not None:
+            db_snapshot = await self._profile_retriever.load_mastery_snapshot(
+                db_session, learner_id, kc_ids
+            )
+            if db_snapshot.components:
+                self._tracer.seed_state(
+                    learner_id,
+                    {kc_id: kc.p_mastery for kc_id, kc in db_snapshot.components.items()},
+                )
 
         mastery_map = await self._tracer.estimate(learner_id=learner_id, kc_ids=kc_ids)
 

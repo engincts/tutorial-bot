@@ -8,8 +8,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from functools import lru_cache
 
-import numpy as np
-
 from app.settings import EmbedderProvider, Settings, get_settings
 
 

@@ -19,9 +19,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database import Base
 
-# Embedding dim — env'den alınır, yoksa 1024 default
-# Module-level settings çağrısı yapmıyoruz: test ortamında env olmayabilir
-_EMBEDDING_DIM = int(__import__("os").environ.get("EMBEDDING_DIM", "1024"))
+from app.settings import get_settings
+
+_EMBEDDING_DIM = get_settings().embedding_dim
 
 # ── ORM Models ────────────────────────────────────────────────────────────────
 

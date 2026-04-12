@@ -12,7 +12,14 @@ from app.settings import get_settings
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-async def _client() -> AsyncClient:
+async def _anon_client() -> AsyncClient:
+    """Kullanıcı işlemleri (login) için anon key kullanılır."""
+    s = get_settings()
+    return await create_client(s.supabase_url, s.supabase_anon_key)
+
+
+async def _admin_client() -> AsyncClient:
+    """Admin işlemleri (register) için service key kullanılır."""
     s = get_settings()
     return await create_client(s.supabase_url, s.supabase_service_key)
 
@@ -35,32 +42,48 @@ class TokenOut(BaseModel):
 
 @router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterIn) -> TokenOut:
-    client = await _client()
+    client = await _admin_client()
     try:
-        response = await client.auth.sign_up({"email": body.email, "password": body.password})
+        res = await client.auth.admin.create_user({
+            "email": body.email,
+            "password": body.password,
+            "email_confirm": True,
+        })
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    if not response.user:
+    if not res.user:
         raise HTTPException(status_code=400, detail="Kayıt başarısız.")
 
-    learner_id = uuid.UUID(response.user.id)
-    token = response.session.access_token if response.session else ""
-    return TokenOut(access_token=token, learner_id=learner_id)
+    # Hemen login yap — token al
+    anon = await _anon_client()
+    try:
+        sign_in = await anon.auth.sign_in_with_password(
+            {"email": body.email, "password": body.password}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return TokenOut(
+        access_token=sign_in.session.access_token,
+        learner_id=uuid.UUID(res.user.id),
+    )
 
 
 @router.post("/login", response_model=TokenOut)
 async def login(body: LoginIn) -> TokenOut:
-    client = await _client()
+    client = await _anon_client()
     try:
-        response = await client.auth.sign_in_with_password(
+        res = await client.auth.sign_in_with_password(
             {"email": body.email, "password": body.password}
         )
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Email veya şifre hatalı.")
+        raise HTTPException(status_code=401, detail=f"Giriş başarısız: {e}")
 
-    if not response.session:
+    if not res.session:
         raise HTTPException(status_code=401, detail="Giriş başarısız.")
 
-    learner_id = uuid.UUID(response.user.id)
-    return TokenOut(access_token=response.session.access_token, learner_id=learner_id)
+    return TokenOut(
+        access_token=res.session.access_token,
+        learner_id=uuid.UUID(res.user.id),
+    )

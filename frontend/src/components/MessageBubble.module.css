@@ -1,0 +1,82 @@
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.assistantRow {
+  justify-content: flex-start;
+}
+
+.userRow {
+  justify-content: flex-end;
+}
+
+.avatar {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.bubble {
+  max-width: min(480px, 80%);
+  border-radius: 18px;
+  padding: 12px 16px;
+  line-height: 1.6;
+}
+
+.assistantBubble {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+  color: var(--text);
+}
+
+.userBubble {
+  background: var(--primary);
+  border-bottom-right-radius: 4px;
+  color: #fff;
+}
+
+.content {
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── KC tags ─────────────────────────────────────────────── */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.tag {
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--primary-light);
+  color: var(--primary);
+  padding: 2px 8px;
+  border-radius: 99px;
+  text-transform: capitalize;
+}
+
+/* ── Meta info ───────────────────────────────────────────── */
+.meta {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 6px;
+}
+
+.userBubble .meta {
+  color: rgba(255,255,255,.6);
+}

@@ -9,7 +9,7 @@ from app.settings import Settings
 
 class AnthropicClient(BaseLLMClient):
     def __init__(self, settings: Settings) -> None:
-        self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=60.0)
         self._model = settings.anthropic_model
 
     @retry(

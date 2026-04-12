@@ -5,17 +5,36 @@ Kişiselleştirilmiş AI tabanlı öğrenci asistanı. Öğrencinin bilgi seviye
 ## Mimari
 
 ```
-POST /chat
+POST /chat  (JWT Bearer zorunlu)
     │
     ├─► KC Tespiti          (kc_mapper — LLM assisted)
-    ├─► Mastery Hesaplama   (AKT / DKT — PyTorch)
-    ├─► İçerik Retrieval    (pgvector semantic search)
+    ├─► Mastery Hesaplama   (AKT / DKT — saf Python, PyTorch yok)
+    ├─► İçerik Retrieval    (pgvector semantic search + opsiyonel rerank)
     ├─► Hafıza Retrieval    (geçmiş etkileşimler + yanılgılar)
     ├─► Pedagoji Planlaması (mastery threshold → prompt seçimi)
     ├─► Prompt İnşası       (context fusion)
-    └─► LLM Yanıtı          (GPT-4o / Claude Sonnet)
+    └─► LLM Yanıtı          (OpenAI / Anthropic / Novita)
          │
-         └─► Async Worker: etkileşim kayıt + mastery güncelleme
+         └─► Redis Worker: etkileşim kayıt + mastery + misconception güncelleme
+```
+
+## Kimlik Doğrulama
+
+Sistem Supabase Auth kullanır. `/chat`, `/ingest/*` ve `/profile/*` endpoint'leri JWT Bearer token gerektirir.
+
+### Token Alma
+
+```bash
+# Kayıt
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "ogrenci@example.com", "password": "sifre123"}'
+
+# Giriş
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "ogrenci@example.com", "password": "sifre123"}'
+# → {"access_token": "eyJ...", "learner_id": "uuid"}
 ```
 
 ## Kurulum
@@ -24,7 +43,17 @@ POST /chat
 
 - Python 3.11+
 - Docker & Docker Compose
-- AKT model checkpoint (`checkpoints/akt_assistments.pt`)
+- Supabase projesi (Auth için)
+
+### Supabase Kurulumu
+
+1. [supabase.com](https://supabase.com) üzerinde yeni proje oluştur
+2. **Project Settings → API** sayfasından şunları kopyala:
+   - `Project URL` → `SUPABASE_URL`
+   - `anon public` key → `SUPABASE_ANON_KEY`
+   - `service_role` key → `SUPABASE_SERVICE_KEY`
+3. **Project Settings → API → JWT Settings** sayfasından:
+   - `JWT Secret` → `SUPABASE_JWT_SECRET`
 
 ### Hızlı Başlangıç
 
@@ -32,22 +61,19 @@ POST /chat
 # 1. Ortam değişkenlerini ayarla
 cp .env.example .env          # Linux/Mac
 copy .env.example .env        # Windows
-# .env dosyasını düzenle — en azından OPENAI_API_KEY veya ANTHROPIC_API_KEY
+# .env dosyasını düzenle — LLM_PROVIDER, API key ve Supabase bilgilerini gir
 
-# 2. Servisleri ayağa kaldır (PostgreSQL + pgvector, Redis)
+# 2. Servisleri ayağa kaldır (PostgreSQL + pgvector, Redis, worker)
 docker compose up -d --build
 
 # 3. Veritabanı migrasyonlarını uygula
 alembic upgrade head
 
-# 4. Örnek müfredat yükle
+# 4. Örnek müfredat yükle (token ile)
 python scripts/seed_curriculum.py
-
-# 5. API'yi başlat
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-> **Not (Linux/Mac):** `make` kuruluysa yukarıdaki komutlar yerine `make docker-up`, `make migrate`, `make dev` kullanılabilir.
+> **Not (Linux/Mac):** `make` kuruluysa `make docker-up`, `make migrate`, `make dev` kullanılabilir.
 
 ### Manuel Kurulum (Docker olmadan)
 
@@ -56,11 +82,14 @@ python -m venv env
 source env/bin/activate          # Linux/Mac
 env\Scripts\activate             # Windows
 
-pip install -r requirements.txt
+pip install -e ".[dev]"
 
 # PostgreSQL ve Redis'i lokal olarak başlat, sonra:
 alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Worker'ı ayrı terminal'de başlat
+python -m app.worker.post_response_worker
 ```
 
 ## Konfigürasyon
@@ -69,36 +98,49 @@ Tüm ayarlar `.env` dosyasından okunur. Detaylı açıklamalar için `.env.exam
 
 | Değişken | Açıklama | Varsayılan |
 |---|---|---|
-| `LLM_PROVIDER` | `openai` veya `anthropic` | `openai` |
-| `EMBEDDER_PROVIDER` | `bge_m3` (local) veya `openai` | `bge_m3` |
-| `KT_MODEL` | `akt` veya `dkt` | `akt` |
+| `LLM_PROVIDER` | `openai` \| `anthropic` \| `novita` | `novita` |
+| `EMBEDDER_PROVIDER` | `openai` \| `novita` | `novita` |
+| `KT_MODEL` | `akt` \| `dkt` | `dkt` |
+| `RERANK_ENABLED` | LLM tabanlı chunk reranking | `false` |
 | `MASTERY_THRESHOLD_LOW` | Bu seviyenin altı → scaffold modu | `0.4` |
 | `MASTERY_THRESHOLD_HIGH` | Bu seviyenin üstü → challenge modu | `0.7` |
 | `CONTENT_TOP_K` | Semantic search'ten kaç chunk çekilsin | `5` |
-| `RERANK_ENABLED` | Cross-encoder rerank aktif mi | `false` |
 
 ## API
 
 Geliştirme ortamında Swagger UI: `http://localhost:8000/docs`
 
-### Temel Endpoint'ler
+Swagger UI'da sağ üstteki **Authorize** butonuna token girerek endpoint'leri test edebilirsiniz.
 
-| Method | Path | Açıklama |
-|---|---|---|
-| `POST` | `/chat` | Öğrenci mesajı gönder, pedagojik yanıt al |
-| `POST` | `/ingest/text` | Metin içeriği müfredata ekle |
-| `POST` | `/ingest/pdf` | PDF dökümanı müfredata ekle |
-| `GET` | `/profile/{learner_id}` | Öğrenci profilini ve mastery snapshot'ını getir |
-| `POST` | `/session/reset` | Aktif oturumu sıfırla |
-| `GET` | `/health` | Servis sağlık kontrolü |
+### Endpoint'ler
+
+| Method | Path | Auth | Açıklama |
+|---|---|---|---|
+| `POST` | `/auth/register` | — | Yeni öğrenci kaydı |
+| `POST` | `/auth/login` | — | Giriş yap, token al |
+| `POST` | `/chat` | JWT | Öğrenci mesajı gönder, pedagojik yanıt al |
+| `POST` | `/ingest/text` | JWT | Metin içeriği müfredata ekle |
+| `POST` | `/ingest/pdf` | JWT | PDF dökümanı müfredata ekle |
+| `GET` | `/profile/{learner_id}` | JWT | Öğrenci profilini ve mastery snapshot'ını getir |
+| `POST` | `/session/reset` | JWT | Aktif oturumu sıfırla |
+| `GET` | `/health` | — | Servis sağlık kontrolü |
 
 ### Örnek İstek
 
 ```bash
+# Önce login ol
+TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "ogrenci@example.com", "password": "sifre123"}' \
+  | jq -r '.access_token')
+
+# Chat isteği gönder
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "learner_id": "550e8400-e29b-41d4-a716-446655440000",
+    "session_id": "660e8400-e29b-41d4-a716-446655440001",
     "message": "Gradient descent nasıl çalışır?"
   }'
 ```
@@ -106,13 +148,13 @@ curl -X POST http://localhost:8000/chat \
 ```json
 {
   "content": "Önce şunu düşün: bir kayıp fonksiyonunun minimumunu bulmak istiyorsun...",
-  "session_id": "...",
+  "session_id": "660e8400-e29b-41d4-a716-446655440001",
   "kc_ids": ["gradient_descent", "optimization"],
   "mastery_snapshot": {
     "gradient_descent": 0.35,
     "optimization": 0.61
   },
-  "model": "gpt-4o",
+  "model": "meta-llama/llama-3.1-8b-instruct",
   "input_tokens": 842,
   "output_tokens": 187
 }
@@ -131,14 +173,18 @@ Tüm stratejilerde Sokratik yöntem zorunludur — sistem doğrudan cevap vermez
 ## Müfredat Yükleme
 
 ```bash
+TOKEN=eyJ...
+
 # Metin olarak
 curl -X POST http://localhost:8000/ingest/text \
+  -H "Authorization: Bearer $TOKEN" \
   -F "document_id=backprop_intro" \
   -F "kc_tags=backpropagation,chain_rule" \
   -F "text=Geri yayılım algoritması..."
 
 # PDF olarak
 curl -X POST http://localhost:8000/ingest/pdf \
+  -H "Authorization: Bearer $TOKEN" \
   -F "document_id=lecture_3" \
   -F "kc_tags=neural_networks,activation_functions" \
   -F "file=@lecture3.pdf"
@@ -183,9 +229,11 @@ tutor-bot/
 ## Tech Stack
 
 - **API**: FastAPI + Uvicorn (async)
-- **LLM**: GPT-4o veya Claude Sonnet (env ile seçilebilir)
-- **Embedding**: BGE-M3 (local, Türkçe güçlü) veya OpenAI
+- **Auth**: Supabase Auth (JWT / JWKS doğrulama)
+- **LLM**: OpenAI / Anthropic / Novita (env ile seçilebilir)
+- **Embedding**: Novita BGE-M3 veya OpenAI (cloud-only, torch yok)
 - **Vector Store**: PostgreSQL 16 + pgvector (HNSW index)
 - **Session Cache**: Redis 7
-- **Knowledge Tracing**: AKT / DKT (PyTorch)
+- **Worker Queue**: Redis LPUSH/BRPOP
+- **Knowledge Tracing**: AKT / DKT (saf Python)
 - **ORM**: SQLAlchemy 2.0 async

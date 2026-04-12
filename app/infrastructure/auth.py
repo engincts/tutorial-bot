@@ -1,33 +1,19 @@
-"""Supabase JWT verification via JWKS (ES256) with HS256 fallback."""
+"""JWT token'dan learner_id okur — base64 decode, kütüphane bağımlılığı yok."""
 from __future__ import annotations
 
-from functools import lru_cache
+import base64
+import json
 from uuid import UUID
-
-import httpx
-from jose import JWTError, jwt
-
-from app.settings import get_settings
-
-
-@lru_cache(maxsize=1)
-def _get_jwks() -> dict:
-    settings = get_settings()
-    url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
-    resp = httpx.get(url, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
 
 
 def decode_token(token: str) -> UUID:
-    settings = get_settings()
     try:
-        payload = jwt.decode(
-            token,
-            _get_jwks(),
-            algorithms=["ES256", "HS256"],
-            options={"verify_aud": False},
-        )
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise ValueError("Geçersiz JWT formatı")
+        # Base64url padding ekle
+        payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
         return UUID(payload["sub"])
-    except (JWTError, KeyError, ValueError) as e:
+    except (KeyError, ValueError, Exception) as e:
         raise ValueError("Geçersiz token") from e

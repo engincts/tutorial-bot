@@ -10,9 +10,10 @@ from app.infrastructure.database import get_session, get_engine, get_session_fac
 from app.infrastructure.embedder_factory import get_embedder
 from app.infrastructure.llm import get_llm_client
 from app.infrastructure.pg_vector_store import PgVectorStore
-from app.infrastructure.redis_client import SessionCache
+from app.infrastructure.redis_client import SessionCache, WorkerQueue
 from app.services.content_rag.chunker import Chunker
 from app.services.content_rag.ingestion_pipeline import IngestionPipeline
+from app.services.content_rag.reranker import Reranker
 from app.services.content_rag.retriever import ContentRetriever
 from app.services.knowledge_tracing import build_tracer
 from app.services.knowledge_tracing.kc_mapper import KCMapper
@@ -22,6 +23,8 @@ from app.services.learner_memory.memory_updater import MemoryUpdater
 from app.services.learner_memory.misconception_store import MisconceptionStore
 from app.services.learner_memory.profile_retriever import ProfileRetriever
 from app.services.orchestration.chat_orchestrator import ChatOrchestrator
+from app.services.orchestration.correctness_evaluator import CorrectnessEvaluator
+from app.services.orchestration.misconception_detector import MisconceptionDetector
 from app.services.orchestration.pedagogy_planner import PedagogyPlanner
 from app.services.orchestration.prompt_builder import PromptBuilder
 from app.services.orchestration.session_manager import SessionManager
@@ -37,10 +40,12 @@ def get_vector_store() -> PgVectorStore:
 @lru_cache(maxsize=1)
 def get_content_retriever() -> ContentRetriever:
     settings = get_settings()
+    reranker = Reranker(llm_client=get_llm_client()) if settings.rerank_enabled else None
     return ContentRetriever(
         embedder=get_embedder(),
         vector_store=get_vector_store(),
         top_k=settings.content_top_k,
+        reranker=reranker,
     )
 
 
@@ -68,12 +73,27 @@ def get_mastery_estimator() -> MasteryEstimator:
     settings = get_settings()
     tracer = build_tracer(settings.kt_model)
     kc_mapper = KCMapper(llm_client=get_llm_client())
-    return MasteryEstimator(tracer=tracer, kc_mapper=kc_mapper)
+    return MasteryEstimator(tracer=tracer, kc_mapper=kc_mapper, profile_retriever=get_profile_retriever())
 
 
 @lru_cache(maxsize=1)
 def get_session_manager() -> SessionManager:
     return SessionManager(cache=SessionCache())
+
+
+@lru_cache(maxsize=1)
+def get_worker_queue() -> WorkerQueue:
+    return WorkerQueue()
+
+
+@lru_cache(maxsize=1)
+def get_correctness_evaluator() -> CorrectnessEvaluator:
+    return CorrectnessEvaluator(llm_client=get_llm_client())
+
+
+@lru_cache(maxsize=1)
+def get_misconception_detector() -> MisconceptionDetector:
+    return MisconceptionDetector(llm_client=get_llm_client())
 
 
 @lru_cache(maxsize=1)
@@ -99,8 +119,10 @@ def get_chat_orchestrator() -> ChatOrchestrator:
         profile_retriever=get_profile_retriever(),
         misconception_store=get_misconception_store(),
         mastery_estimator=get_mastery_estimator(),
-        memory_updater=get_memory_updater(),
+        worker_queue=get_worker_queue(),
         session_manager=get_session_manager(),
         pedagogy_planner=PedagogyPlanner(settings=settings),
         prompt_builder=PromptBuilder(),
+        correctness_evaluator=get_correctness_evaluator(),
+        misconception_detector=get_misconception_detector(),
     )
