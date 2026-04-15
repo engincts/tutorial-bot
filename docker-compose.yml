@@ -24,8 +24,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
     volumes:
       - ./checkpoints:/app/checkpoints
       - ./prompts:/app/prompts
@@ -44,27 +42,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
     volumes:
       - ./logs:/app/logs
-    restart: unless-stopped
-
-  postgres:
-    image: pgvector/pgvector:pg16
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: tutorbot
-      POSTGRES_USER: tutorbot
-      POSTGRES_PASSWORD: tutorbot_dev
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tutorbot -d tutorbot"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
     restart: unless-stopped
 
   redis:
@@ -82,4 +61,3 @@ services:
 
 volumes:
   redis_data:
-  postgres_data:

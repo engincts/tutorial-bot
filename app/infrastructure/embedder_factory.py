@@ -113,9 +113,13 @@ class NovitaEmbedder(BaseEmbedder):
         response = await self._client.embeddings.create(input=text, model=self._model)
         return response.data[0].embedding
 
-    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        response = await self._client.embeddings.create(input=texts, model=self._model)
-        return [item.embedding for item in response.data]
+    async def embed_batch(self, texts: list[str], _batch_size: int = 20) -> list[list[float]]:
+        results: list[list[float]] = []
+        for i in range(0, len(texts), _batch_size):
+            batch = texts[i: i + _batch_size]
+            response = await self._client.embeddings.create(input=batch, model=self._model)
+            results.extend(item.embedding for item in response.data)
+        return results
 
     @property
     def dim(self) -> int:

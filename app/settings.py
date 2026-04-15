@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     postgres_db: str = "tutorbot"
     postgres_user: str = "tutorbot"
     postgres_password: str = Field(default="tutorbot_dev", repr=False)
+    postgres_ssl: str = "disable"  # "disable" | "require"
 
     # ── Redis ────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"

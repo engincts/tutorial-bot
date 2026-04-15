@@ -1,6 +1,8 @@
 import { useState } from "react";
 import LoginPage from "./components/LoginPage";
 import ChatPage from "./components/ChatPage";
+import ProfilePage from "./components/ProfilePage";
+import styles from "./App.module.css";
 
 export default function App() {
   const [auth, setAuth] = useState(() => {
@@ -11,10 +13,12 @@ export default function App() {
       return null;
     }
   });
+  const [tab, setTab] = useState("chat");
 
   function handleLogin(data) {
     localStorage.setItem("tb_auth", JSON.stringify(data));
     setAuth(data);
+    setTab("chat");
   }
 
   function handleLogout() {
@@ -23,5 +27,43 @@ export default function App() {
   }
 
   if (!auth) return <LoginPage onLogin={handleLogin} />;
-  return <ChatPage auth={auth} onLogout={handleLogout} />;
+
+  return (
+    <div className={styles.shell}>
+      {/* ── Top nav ── */}
+      <header className={styles.nav}>
+        <div className={styles.navBrand}>
+          <span className={styles.navIcon}>🎓</span>
+          <span className={styles.navTitle}>Tutor Bot</span>
+        </div>
+        <nav className={styles.tabs}>
+          <button
+            className={`${styles.tab} ${tab === "chat" ? styles.tabActive : ""}`}
+            onClick={() => setTab("chat")}
+          >
+            Sohbet
+          </button>
+          <button
+            className={`${styles.tab} ${tab === "profile" ? styles.tabActive : ""}`}
+            onClick={() => setTab("profile")}
+          >
+            Profilim
+          </button>
+        </nav>
+        <button className={styles.logoutBtn} onClick={handleLogout}>
+          Çıkış
+        </button>
+      </header>
+
+      {/* ── Content ── */}
+      <div className={styles.content}>
+        <div className={tab === "chat" ? styles.tabPane : styles.tabPaneHidden}>
+          <ChatPage auth={auth} />
+        </div>
+        <div className={tab === "profile" ? styles.tabPane : styles.tabPaneHidden}>
+          <ProfilePage auth={auth} />
+        </div>
+      </div>
+    </div>
+  );
 }

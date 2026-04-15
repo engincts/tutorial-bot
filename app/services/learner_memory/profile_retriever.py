@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import uuid
+
+import sqlalchemy as sa
 from datetime import datetime, timezone
 
 from sqlalchemy import Text, select, text
@@ -39,6 +41,7 @@ class KCMasteryORM(Base):
     p_mastery: Mapped[float] = mapped_column(server_default="0.3")
     attempts: Mapped[int] = mapped_column(server_default="0")
     last_interaction: Mapped[datetime] = mapped_column(server_default=text("NOW()"))
+    subject: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class MisconductORM(Base):
@@ -49,7 +52,9 @@ class MisconductORM(Base):
     kc_id: Mapped[str] = mapped_column(Text)
     description: Mapped[str] = mapped_column(Text)
     resolved: Mapped[bool] = mapped_column(server_default="false")
-    detected_at: Mapped[datetime] = mapped_column(server_default=text("NOW()"))
+    detected_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=text("NOW()")
+    )
 
 
 # ── Service ───────────────────────────────────────────────────────────────────
@@ -120,6 +125,7 @@ class ProfileRetriever:
                     label=row.kc_id.replace("_", " ").title(),
                     p_mastery=row.p_mastery,
                     attempts=row.attempts,
+                    domain=row.subject or "genel",
                 )
             )
         return snapshot
@@ -130,20 +136,23 @@ class ProfileRetriever:
         learner_id: uuid.UUID,
         kc_id: str,
         p_mastery: float,
+        subject: str | None = None,
     ) -> None:
         """Tek bir KC'nin mastery değerini günceller (upsert)."""
         await session.execute(
             text("""
-                INSERT INTO mastery_scores (learner_id, kc_id, p_mastery, attempts, last_interaction)
-                VALUES (:learner_id, :kc_id, :p_mastery, 1, NOW())
+                INSERT INTO mastery_scores (learner_id, kc_id, p_mastery, attempts, last_interaction, subject)
+                VALUES (:learner_id, :kc_id, :p_mastery, 1, NOW(), :subject)
                 ON CONFLICT (learner_id, kc_id)
                 DO UPDATE SET
                     p_mastery = :p_mastery,
                     attempts = mastery_scores.attempts + 1,
-                    last_interaction = NOW()
+                    last_interaction = NOW(),
+                    subject = COALESCE(:subject, mastery_scores.subject)
             """).bindparams(
                 learner_id=str(learner_id),
                 kc_id=kc_id,
                 p_mastery=p_mastery,
+                subject=subject,
             )
         )

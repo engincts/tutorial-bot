@@ -15,7 +15,7 @@ from app.services.content_rag.ingestion_pipeline import IngestionPipeline
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 _MAX_TEXT_CHARS = 500_000          # ~500 KB metin
-_MAX_PDF_BYTES = 20 * 1024 * 1024  # 20 MB
+_MAX_PDF_BYTES = 100 * 1024 * 1024  # 100 MB
 _PDF_CONTENT_TYPES = {"application/pdf", "application/octet-stream"}
 
 

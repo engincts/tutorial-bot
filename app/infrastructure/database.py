@@ -32,7 +32,7 @@ def build_engine(settings: Settings) -> AsyncEngine:
             "port": settings.postgres_port,
             "user": settings.postgres_user,
             "password": settings.postgres_password,
-            "ssl": "disable",
+            "ssl": settings.postgres_ssl,
         },
     )
 

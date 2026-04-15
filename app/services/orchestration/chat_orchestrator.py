@@ -186,16 +186,24 @@ class ChatOrchestrator:
         )
 
         new_mastery: dict[str, float] | None = None
-        if correct is not None and kc_ids:
+        if kc_ids:
+            # correct=None (belirsiz/soru) → True gibi davran (etkileşim = öğrenme sinyali)
+            effective_correct = correct if correct is not None else True
             new_mastery = await self._mastery_estimator.update_after_interaction(
                 learner_id=request.learner_id,
                 kc_ids=kc_ids,
-                correct=correct,
+                correct=effective_correct,
             )
-            logger.debug("mastery updated | correct=%s new=%s", correct, new_mastery)
+            logger.debug("mastery updated | correct=%s effective=%s new=%s", correct, effective_correct, new_mastery)
 
         if detected_misconceptions:
             logger.debug("misconceptions detected | %s", detected_misconceptions)
+
+        # En çok dönen document_id → subject olarak kullan
+        subject: str | None = None
+        if content_chunks:
+            from collections import Counter
+            subject = Counter(c.document_id for c in content_chunks).most_common(1)[0][0]
 
         # ── 10. Worker queue'ya iş gönder ─────────────────────────────
         await self._worker_queue.push({
@@ -205,6 +213,7 @@ class ChatOrchestrator:
             "content_summary": request.message[:300],
             "kc_tags": kc_ids,
             "new_mastery": new_mastery,
+            "subject": subject,
             "misconceptions": [
                 {"kc_id": kc_id, "description": desc}
                 for kc_id, desc in detected_misconceptions

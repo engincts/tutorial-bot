@@ -50,6 +50,7 @@ async def _process(job: dict) -> None:
         interaction=interaction,
         new_mastery=new_mastery,
         misconceptions=misconceptions or None,
+        subject=job.get("subject"),
     )
     logger.info(
         "job işlendi | learner=%s kc=%s mastery_updated=%s misconceptions=%d",
@@ -86,7 +87,7 @@ async def _process_with_retry(job: dict, queue: WorkerQueue) -> None:
 
 async def _run() -> None:
     settings = get_settings()
-    configure_logging(log_level=settings.log_level)
+    configure_logging(log_level=settings.log_level, service="worker")
     init_db(settings)
     init_redis(settings)
 

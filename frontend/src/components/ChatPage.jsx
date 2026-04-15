@@ -5,7 +5,7 @@ import MasteryPanel from "./MasteryPanel";
 import styles from "./ChatPage.module.css";
 import { generateSessionId } from "../utils";
 
-export default function ChatPage({ auth, onLogout }) {
+export default function ChatPage({ auth }) {
   const { access_token: token, learner_id: learnerId } = auth;
 
   const [sessionId] = useState(() => generateSessionId());
@@ -94,32 +94,23 @@ export default function ChatPage({ auth, onLogout }) {
 
   return (
     <div className={styles.layout}>
-      {/* ── Header ────────────────────────────────────────────── */}
-      <header className={styles.header}>
-        <div className={styles.headerLeft}>
-          <span className={styles.headerIcon}>🎓</span>
-          <span className={styles.headerTitle}>Tutor Bot</span>
-        </div>
-        <div className={styles.headerRight}>
-          <button
-            className={styles.iconBtn}
-            title="Mastery panelini aç/kapat"
-            onClick={() => setSidebarOpen((o) => !o)}
-          >
-            <ChartIcon />
-          </button>
-          <button
-            className={styles.iconBtn}
-            title="Oturumu sıfırla"
-            onClick={handleReset}
-          >
-            <ResetIcon />
-          </button>
-          <button className={styles.logoutBtn} onClick={onLogout}>
-            Çıkış
-          </button>
-        </div>
-      </header>
+      {/* ── Toolbar ───────────────────────────────────────────── */}
+      <div className={styles.toolbar}>
+        <button
+          className={styles.iconBtn}
+          title="Bilgi panelini aç/kapat"
+          onClick={() => setSidebarOpen((o) => !o)}
+        >
+          <ChartIcon />
+        </button>
+        <button
+          className={styles.iconBtn}
+          title="Oturumu sıfırla"
+          onClick={handleReset}
+        >
+          <ResetIcon />
+        </button>
+      </div>
 
       {/* ── Body ──────────────────────────────────────────────── */}
       <div className={styles.body}>

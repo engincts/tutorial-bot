@@ -51,7 +51,7 @@ export async function sendChat(token, _learnerId, sessionId, message) {
 
 export async function getProfile(token, learnerId) {
   const res = await fetch(`${BASE}/profile/${learnerId}`, {
-    headers: authHeaders(token),
+    headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return null;
   return res.json();

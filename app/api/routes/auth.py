@@ -38,6 +38,7 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     learner_id: uuid.UUID
+    email: str
 
 
 @router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
@@ -67,6 +68,7 @@ async def register(body: RegisterIn) -> TokenOut:
     return TokenOut(
         access_token=sign_in.session.access_token,
         learner_id=uuid.UUID(res.user.id),
+        email=res.user.email or body.email,
     )
 
 
@@ -86,4 +88,5 @@ async def login(body: LoginIn) -> TokenOut:
     return TokenOut(
         access_token=res.session.access_token,
         learner_id=uuid.UUID(res.user.id),
+        email=res.user.email or body.email,
     )
