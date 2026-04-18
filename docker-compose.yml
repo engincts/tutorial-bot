@@ -28,6 +28,7 @@ services:
       - ./checkpoints:/app/checkpoints
       - ./prompts:/app/prompts
       - ./logs:/app/logs
+      - ./config.json:/app/config.json
     restart: unless-stopped
 
   worker:
@@ -44,6 +45,7 @@ services:
         condition: service_healthy
     volumes:
       - ./logs:/app/logs
+      - ./config.json:/app/config.json
     restart: unless-stopped
 
   redis:

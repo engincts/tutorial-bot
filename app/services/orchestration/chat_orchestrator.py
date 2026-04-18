@@ -103,25 +103,19 @@ class ChatOrchestrator:
             db_session, request.learner_id
         )
 
-        # ── 2. Paralel retrieval ──────────────────────────────────────
-        content_task = asyncio.create_task(
-            self._content_retriever.retrieve(
-                db_session,
-                query=request.message,
-                kc_filter=ctx.active_kc_ids or None,
-                top_k=self._settings.content_top_k,
-            )
+        # ── 2. Retrieval (sıralı — asyncpg aynı bağlantıda eş zamanlı sorguyu desteklemez)
+        query_embedding = await self._content_retriever.embed(request.message)
+        content_chunks = await self._content_retriever.retrieve(
+            db_session,
+            query=request.message,
+            kc_filter=ctx.active_kc_ids or None,
+            top_k=self._settings.content_top_k,
         )
-        memory_task = asyncio.create_task(
-            self._vector_store.search_learner_memory(
-                db_session,
-                learner_id=request.learner_id,
-                query_embedding=await self._content_retriever.embed(request.message),
-                top_k=self._settings.memory_top_k,
-            )
-        )
-        content_chunks, memory_interactions = await asyncio.gather(
-            content_task, memory_task
+        memory_interactions = await self._vector_store.search_learner_memory(
+            db_session,
+            learner_id=request.learner_id,
+            query_embedding=query_embedding,
+            top_k=self._settings.memory_top_k,
         )
 
         # ── 3. KC extraction + mastery ────────────────────────────────
@@ -199,9 +193,15 @@ class ChatOrchestrator:
         if detected_misconceptions:
             logger.debug("misconceptions detected | %s", detected_misconceptions)
 
-        # En çok dönen document_id → subject olarak kullan
+        # kc_id'lerin ilk iki parçasından subject türet: "tyt_matematik_limit" → "tyt_matematik"
+        # Yoksa content chunk'ların document_id'si fallback olarak kullanılır
         subject: str | None = None
-        if content_chunks:
+        if kc_ids:
+            from collections import Counter
+            prefixes = ["_".join(k.split("_")[:2]) for k in kc_ids if "_" in k]
+            if prefixes:
+                subject = Counter(prefixes).most_common(1)[0][0]
+        if subject is None and content_chunks:
             from collections import Counter
             subject = Counter(c.document_id for c in content_chunks).most_common(1)[0][0]
 

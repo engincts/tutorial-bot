@@ -1,3 +1,4 @@
+import ReactMarkdown from "react-markdown";
 import styles from "./MessageBubble.module.css";
 
 export default function MessageBubble({ message }) {
@@ -9,7 +10,13 @@ export default function MessageBubble({ message }) {
         <div className={styles.avatar}>🤖</div>
       )}
       <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.assistantBubble}`}>
-        <p className={styles.content}>{message.content}</p>
+        {isUser ? (
+          <p className={styles.content}>{message.content}</p>
+        ) : (
+          <div className={styles.markdown}>
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
+        )}
 
         {message.kc_ids && message.kc_ids.length > 0 && (
           <div className={styles.tags}>

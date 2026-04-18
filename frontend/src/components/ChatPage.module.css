@@ -197,6 +197,11 @@
   overflow-y: auto;
 }
 
+/* Desktop'ta gizle, mobile'da göster */
+.mobileOnly {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .masteryAside {
     display: none;
@@ -206,5 +211,9 @@
 @media (max-width: 768px) {
   .layout {
     flex-direction: column;
+  }
+
+  .mobileOnly {
+    display: flex;
   }
 }
