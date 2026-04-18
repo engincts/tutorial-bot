@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
-from app.api.routes import auth, chat, ingest, profile, session
+from app.api.routes import auth, chat, conversations, ingest, profile, session
 from app.infrastructure.database import close_db, init_db
 from app.infrastructure.redis_client import close_redis, init_redis
 from app.logging_config import configure_logging
@@ -68,6 +68,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router)
     app.include_router(chat.router)
+    app.include_router(conversations.router)
     app.include_router(ingest.router)
     app.include_router(profile.router)
     app.include_router(session.router)

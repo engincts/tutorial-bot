@@ -22,6 +22,7 @@ from app.services.learner_memory.interaction_logger import InteractionLogger
 from app.services.learner_memory.memory_updater import MemoryUpdater
 from app.services.learner_memory.misconception_store import MisconceptionStore
 from app.services.learner_memory.profile_retriever import ProfileRetriever
+from app.infrastructure.chat_store import ChatStore
 from app.services.orchestration.chat_orchestrator import ChatOrchestrator
 from app.services.orchestration.correctness_evaluator import CorrectnessEvaluator
 from app.services.orchestration.misconception_detector import MisconceptionDetector
@@ -30,6 +31,11 @@ from app.services.orchestration.prompt_builder import PromptBuilder
 from app.services.orchestration.session_manager import SessionManager
 from app.settings import get_settings
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+
+@lru_cache(maxsize=1)
+def get_chat_store() -> ChatStore:
+    return ChatStore()
 
 
 @lru_cache(maxsize=1)

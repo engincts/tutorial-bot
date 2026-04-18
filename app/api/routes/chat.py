@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_chat_orchestrator
+from app.api.dependencies import get_chat_orchestrator, get_chat_store
 from app.api.dependencies_auth import get_current_learner_id
+from app.infrastructure.chat_store import ChatStore
 from app.infrastructure.database import get_session
 from app.services.orchestration.chat_orchestrator import ChatOrchestrator, ChatRequest
 
@@ -35,9 +36,15 @@ async def chat(
     body: ChatIn,
     learner_id: uuid.UUID = Depends(get_current_learner_id),
     orchestrator: ChatOrchestrator = Depends(get_chat_orchestrator),
+    store: ChatStore = Depends(get_chat_store),
     db: AsyncSession = Depends(get_session),
 ) -> ChatOut:
     session_id = body.session_id or uuid.uuid4()
+
+    title = body.message[:60].strip() or "Yeni Sohbet"
+    await store.ensure_session(db, session_id, learner_id, title)
+    await store.add_message(db, session_id, learner_id, "user", body.message)
+
     try:
         response = await orchestrator.chat(
             request=ChatRequest(
@@ -49,6 +56,9 @@ async def chat(
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    await store.add_message(db, session_id, learner_id, "assistant", response.content)
+
     return ChatOut(
         content=response.content,
         session_id=response.session_id,

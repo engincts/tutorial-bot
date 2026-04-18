@@ -66,3 +66,26 @@ export async function resetSession(token, learnerId, sessionId) {
   if (!res.ok) throw new Error("Oturum sıfırlanamadı");
   return res.json();
 }
+
+export async function listConversations(token) {
+  const res = await fetch(`${BASE}/conversations`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function getConversationMessages(token, sessionId) {
+  const res = await fetch(`${BASE}/conversations/${sessionId}/messages`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function deleteConversation(token, sessionId) {
+  await fetch(`${BASE}/conversations/${sessionId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

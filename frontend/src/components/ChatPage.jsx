@@ -1,33 +1,71 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { sendChat, resetSession } from "../api";
+import { sendChat, listConversations, getConversationMessages } from "../api";
 import MessageBubble from "./MessageBubble";
 import MasteryPanel from "./MasteryPanel";
+import ConversationSidebar from "./ConversationSidebar";
 import styles from "./ChatPage.module.css";
 import { generateSessionId } from "../utils";
+
+const WELCOME = {
+  id: "welcome",
+  role: "assistant",
+  content: "Merhaba! Ben senin kişisel AI öğretmeniniyim. Hangi konuda çalışmak istiyorsun?",
+};
 
 export default function ChatPage({ auth }) {
   const { access_token: token, learner_id: learnerId } = auth;
 
-  const [sessionId] = useState(() => generateSessionId());
-  const [messages, setMessages] = useState([
-    {
-      id: "welcome",
-      role: "assistant",
-      content: "Merhaba! Ben senin kişisel AI öğretmeniniyim. Hangi konuda çalışmak istiyorsun?",
-    },
-  ]);
+  const [sessions, setSessions] = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(() => generateSessionId());
+  const [messages, setMessages] = useState([WELCOME]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [mastery, setMastery] = useState({});
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [masteryOpen, setMasteryOpen] = useState(false);
   const [error, setError] = useState("");
 
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
+  // Oturum listesini yükle
+  useEffect(() => {
+    listConversations(token).then(setSessions);
+  }, [token]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  // Var olan bir sohbeti seç
+  async function handleSelectSession(session) {
+    setCurrentSessionId(session.id);
+    setError("");
+    setLoading(true);
+    const msgs = await getConversationMessages(token, session.id);
+    setMessages(
+      msgs.length > 0
+        ? msgs.map((m) => ({ id: m.id, role: m.role, content: m.content }))
+        : [WELCOME]
+    );
+    setLoading(false);
+    inputRef.current?.focus();
+  }
+
+  // Yeni sohbet
+  function handleNewSession() {
+    const id = generateSessionId();
+    setCurrentSessionId(id);
+    setMessages([WELCOME]);
+    setMastery({});
+    setError("");
+    inputRef.current?.focus();
+  }
+
+  // Sohbet sil
+  function handleDeleted(id) {
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    if (id === currentSessionId) handleNewSession();
+  }
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -37,11 +75,11 @@ export default function ChatPage({ auth }) {
     setError("");
 
     const userMsg = { id: Date.now().toString(), role: "user", content: text };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev.filter((m) => m.id !== "welcome"), userMsg]);
     setLoading(true);
 
     try {
-      const data = await sendChat(token, learnerId, sessionId, text);
+      const data = await sendChat(token, learnerId, currentSessionId, text);
 
       setMessages((prev) => [
         ...prev,
@@ -58,6 +96,14 @@ export default function ChatPage({ auth }) {
       if (data.mastery_snapshot) {
         setMastery((prev) => ({ ...prev, ...data.mastery_snapshot }));
       }
+
+      // Oturum listesini güncelle — başa taşı veya ekle
+      setSessions((prev) => {
+        const existing = prev.find((s) => s.id === currentSessionId);
+        const title = text.slice(0, 60);
+        const updated = { id: currentSessionId, title, updated_at: new Date().toISOString(), created_at: existing?.created_at || new Date().toISOString() };
+        return [updated, ...prev.filter((s) => s.id !== currentSessionId)];
+      });
     } catch (err) {
       setError(err.message);
       setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
@@ -66,7 +112,7 @@ export default function ChatPage({ auth }) {
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, loading, token, learnerId, sessionId]);
+  }, [input, loading, token, learnerId, currentSessionId]);
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -75,103 +121,90 @@ export default function ChatPage({ auth }) {
     }
   }
 
-  async function handleReset() {
-    if (!confirm("Oturumu sıfırlamak istediğine emin misin?")) return;
-    try {
-      await resetSession(token, learnerId, sessionId);
-      setMessages([
-        {
-          id: "reset",
-          role: "assistant",
-          content: "Oturum sıfırlandı. Yeni bir konuya başlayabiliriz!",
-        },
-      ]);
-      setMastery({});
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
   return (
     <div className={styles.layout}>
-      {/* ── Toolbar ───────────────────────────────────────────── */}
-      <div className={styles.toolbar}>
-        <button
-          className={styles.iconBtn}
-          title="Bilgi panelini aç/kapat"
-          onClick={() => setSidebarOpen((o) => !o)}
-        >
-          <ChartIcon />
-        </button>
-        <button
-          className={styles.iconBtn}
-          title="Oturumu sıfırla"
-          onClick={handleReset}
-        >
-          <ResetIcon />
-        </button>
+      {/* ── Sol: Sohbet listesi ── */}
+      <ConversationSidebar
+        token={token}
+        sessions={sessions}
+        activeId={currentSessionId}
+        onSelect={handleSelectSession}
+        onNew={handleNewSession}
+        onDeleted={handleDeleted}
+      />
+
+      {/* ── Orta: Chat alanı ── */}
+      <div className={styles.chatArea}>
+        {/* Toolbar */}
+        <div className={styles.toolbar}>
+          <span className={styles.sessionTitle}>
+            {sessions.find((s) => s.id === currentSessionId)?.title || "Yeni Sohbet"}
+          </span>
+          <button
+            className={styles.iconBtn}
+            title="Bilgi seviyesi"
+            onClick={() => setMasteryOpen((o) => !o)}
+          >
+            <ChartIcon />
+          </button>
+        </div>
+
+        {/* Mesajlar */}
+        <div className={styles.messages}>
+          {messages.map((msg) => (
+            <MessageBubble key={msg.id} message={msg} />
+          ))}
+
+          {loading && (
+            <div className={styles.typing}>
+              <span /><span /><span />
+            </div>
+          )}
+
+          {error && (
+            <div className={styles.errorBanner}>
+              {error}
+              <button onClick={() => setError("")}>✕</button>
+            </div>
+          )}
+
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input */}
+        <div className={styles.inputWrap}>
+          <textarea
+            ref={inputRef}
+            className={styles.input}
+            rows={1}
+            placeholder="Bir soru sor veya konu anlat..."
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              e.target.style.height = "auto";
+              e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+            }}
+            onKeyDown={handleKeyDown}
+            disabled={loading}
+          />
+          <button
+            className={styles.sendBtn}
+            onClick={handleSend}
+            disabled={loading || !input.trim()}
+            title="Gönder (Enter)"
+          >
+            <SendIcon />
+          </button>
+        </div>
+        <p className={styles.hint}>Enter → gönder &nbsp;·&nbsp; Shift+Enter → yeni satır</p>
       </div>
 
-      {/* ── Body ──────────────────────────────────────────────── */}
-      <div className={styles.body}>
-        {/* ── Chat ── */}
-        <main className={styles.chat}>
-          <div className={styles.messages}>
-            {messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
-            ))}
-
-            {loading && (
-              <div className={styles.typing}>
-                <span /><span /><span />
-              </div>
-            )}
-
-            {error && (
-              <div className={styles.errorBanner}>
-                {error}
-                <button onClick={() => setError("")}>✕</button>
-              </div>
-            )}
-
-            <div ref={bottomRef} />
-          </div>
-
-          {/* ── Input ── */}
-          <div className={styles.inputWrap}>
-            <textarea
-              ref={inputRef}
-              className={styles.input}
-              rows={1}
-              placeholder="Bir soru sor veya konu anlat..."
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                e.target.style.height = "auto";
-                e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
-              }}
-              onKeyDown={handleKeyDown}
-              disabled={loading}
-            />
-            <button
-              className={styles.sendBtn}
-              onClick={handleSend}
-              disabled={loading || !input.trim()}
-              title="Gönder (Enter)"
-            >
-              <SendIcon />
-            </button>
-          </div>
-          <p className={styles.hint}>Enter → gönder &nbsp;·&nbsp; Shift+Enter → yeni satır</p>
-        </main>
-
-        {/* ── Sidebar ── */}
-        {sidebarOpen && (
-          <aside className={styles.sidebar}>
-            <MasteryPanel mastery={mastery} />
-          </aside>
-        )}
-      </div>
+      {/* ── Sağ: Mastery panel ── */}
+      {masteryOpen && (
+        <aside className={styles.masteryAside}>
+          <MasteryPanel mastery={mastery} />
+        </aside>
+      )}
     </div>
   );
 }
@@ -191,15 +224,6 @@ function ChartIcon() {
       <line x1="18" y1="20" x2="18" y2="10" />
       <line x1="12" y1="20" x2="12" y2="4" />
       <line x1="6" y1="20" x2="6" y2="14" />
-    </svg>
-  );
-}
-
-function ResetIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="1 4 1 10 7 10" />
-      <path d="M3.51 15a9 9 0 1 0 .49-3.63" />
     </svg>
   );
 }

@@ -142,7 +142,7 @@ class ProfileRetriever:
         await session.execute(
             text("""
                 INSERT INTO mastery_scores (learner_id, kc_id, p_mastery, attempts, last_interaction, subject)
-                VALUES (:learner_id, :kc_id, :p_mastery, 1, NOW(), :subject)
+                VALUES (CAST(:learner_id AS uuid), :kc_id, :p_mastery, 1, NOW(), :subject)
                 ON CONFLICT (learner_id, kc_id)
                 DO UPDATE SET
                     p_mastery = :p_mastery,
