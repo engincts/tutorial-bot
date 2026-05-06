@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.api.dependencies import get_session_manager
+from app.api.dependencies_auth import get_current_learner_id
 from app.services.orchestration.session_manager import SessionManager
 
 router = APIRouter(prefix="/session", tags=["session"])
@@ -20,6 +21,7 @@ class ResetOut(BaseModel):
 @router.post("/reset", response_model=ResetOut)
 async def reset_session(
     session_id: uuid.UUID,
+    _: uuid.UUID = Depends(get_current_learner_id),
     manager: SessionManager = Depends(get_session_manager),
 ) -> ResetOut:
     await manager.reset(session_id)

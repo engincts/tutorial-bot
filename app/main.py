@@ -75,7 +75,27 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     async def health():
-        return {"status": "ok"}
+        from sqlalchemy import text as sa_text
+        from app.infrastructure.database import get_engine
+        from app.infrastructure.redis_client import get_redis
+
+        checks: dict = {}
+
+        try:
+            await get_redis().ping()
+            checks["redis"] = "ok"
+        except Exception:
+            checks["redis"] = "error"
+
+        try:
+            async with get_engine().connect() as conn:
+                await conn.execute(sa_text("SELECT 1"))
+            checks["database"] = "ok"
+        except Exception:
+            checks["database"] = "error"
+
+        checks["status"] = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
+        return checks
 
     return app
 

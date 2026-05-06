@@ -29,7 +29,7 @@ class MisconceptionStore:
             kc_id=kc_id,
             description=description,
             resolved=False,
-            detected_at=datetime.now(timezone.utc),
+            detected_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         session.add(row)
         await session.flush()

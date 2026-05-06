@@ -53,7 +53,7 @@ class MisconductORM(Base):
     description: Mapped[str] = mapped_column(Text)
     resolved: Mapped[bool] = mapped_column(server_default="false")
     detected_at: Mapped[datetime] = mapped_column(
-        sa.DateTime(timezone=True), server_default=text("NOW()")
+        sa.DateTime(timezone=False), server_default=text("NOW()")
     )
 
 

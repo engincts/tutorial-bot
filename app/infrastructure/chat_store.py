@@ -95,12 +95,16 @@ class ChatStore:
         self,
         session: AsyncSession,
         session_id: uuid.UUID,
+        learner_id: uuid.UUID | None = None,
     ) -> list[ChatMessageORM]:
-        result = await session.execute(
+        stmt = (
             select(ChatMessageORM)
             .where(ChatMessageORM.session_id == session_id)
             .order_by(ChatMessageORM.created_at.asc())
         )
+        if learner_id is not None:
+            stmt = stmt.where(ChatMessageORM.learner_id == learner_id)
+        result = await session.execute(stmt)
         return list(result.scalars().all())
 
     async def delete_session(

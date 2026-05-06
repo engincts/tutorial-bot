@@ -108,6 +108,7 @@ class ChatOrchestrator:
         content_chunks = await self._content_retriever.retrieve(
             db_session,
             query=request.message,
+            embedding=query_embedding,
             kc_filter=ctx.active_kc_ids or None,
             top_k=self._settings.content_top_k,
         )
@@ -190,6 +191,19 @@ class ChatOrchestrator:
             )
             logger.debug("mastery updated | correct=%s effective=%s new=%s", correct, effective_correct, new_mastery)
 
+            # Session context'i güncel mastery ile tekrar kaydet
+            if new_mastery:
+                from app.domain.knowledge_component import KnowledgeComponent
+                for kc_id, p_mastery in new_mastery.items():
+                    ctx.mastery_snapshot.upsert(
+                        KnowledgeComponent(
+                            kc_id=kc_id,
+                            label=kc_id.replace("_", " ").title(),
+                            p_mastery=p_mastery,
+                        )
+                    )
+                await self._session_manager.save(ctx)
+
         if detected_misconceptions:
             logger.debug("misconceptions detected | %s", detected_misconceptions)
 
@@ -229,7 +243,10 @@ class ChatOrchestrator:
             content=llm_response.content,
             session_id=request.session_id,
             kc_ids=kc_ids,
-            mastery_snapshot={k: v.p_mastery for k, v in mastery_snapshot.components.items()},
+            mastery_snapshot={
+                **{k: v.p_mastery for k, v in mastery_snapshot.components.items()},
+                **(new_mastery or {}),
+            },
             model=llm_response.model,
             input_tokens=llm_response.input_tokens,
             output_tokens=llm_response.output_tokens,

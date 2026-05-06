@@ -46,14 +46,16 @@ class ContentRetriever:
         self,
         session: AsyncSession,
         query: str,
+        embedding: list[float] | None = None,
         kc_filter: list[str] | None = None,
         top_k: int | None = None,
     ) -> list[RetrievedChunk]:
         """
         Sorguyu embed eder ve pgvector'dan en yakın chunk'ları getirir.
+        embedding verilirse yeniden embed etmez — orchestrator'dan geçirilen embedding kullanılır.
         kc_filter verilirse sadece o KC etiketlerini içeren chunk'ları döner.
         """
-        query_embedding = await self._embedder.embed(query)
+        query_embedding = embedding if embedding is not None else await self._embedder.embed(query)
         k = top_k or self._top_k
 
         raw_chunks: list[ContentChunk] = await self._store.search_content(
