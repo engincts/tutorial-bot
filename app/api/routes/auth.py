@@ -36,6 +36,7 @@ class LoginIn(BaseModel):
 
 class TokenOut(BaseModel):
     access_token: str
+    refresh_token: str = ""
     token_type: str = "bearer"
     learner_id: uuid.UUID
     email: str
@@ -67,6 +68,7 @@ async def register(body: RegisterIn) -> TokenOut:
 
     return TokenOut(
         access_token=sign_in.session.access_token,
+        refresh_token=sign_in.session.refresh_token,
         learner_id=uuid.UUID(res.user.id),
         email=res.user.email or body.email,
     )

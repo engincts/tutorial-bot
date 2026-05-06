@@ -103,6 +103,12 @@ def get_misconception_detector() -> MisconceptionDetector:
 
 
 @lru_cache(maxsize=1)
+def get_llm_mastery_evaluator():
+    from app.services.knowledge_tracing.llm_mastery_evaluator import LLMMasteryEvaluator
+    return LLMMasteryEvaluator(llm_client=get_llm_client())
+
+
+@lru_cache(maxsize=1)
 def get_memory_updater() -> MemoryUpdater:
     embedder = get_embedder()
     vector_store = get_vector_store()
@@ -111,6 +117,7 @@ def get_memory_updater() -> MemoryUpdater:
         interaction_logger=InteractionLogger(embedder=embedder, vector_store=vector_store),
         misconception_store=get_misconception_store(),
         profile_retriever=get_profile_retriever(),
+        mastery_evaluator=get_llm_mastery_evaluator(),
     )
 
 

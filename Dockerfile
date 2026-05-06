@@ -13,4 +13,4 @@ RUN pip install --no-cache-dir --timeout=300 --retries=5 ".[dev]"
 
 COPY . .
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005", "--reload"]

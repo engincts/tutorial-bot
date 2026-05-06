@@ -1,34 +1,36 @@
 """JWT token'dan learner_id okur.
 
-supabase_jwt_secret ayarlandıysa PyJWT ile imza doğrulaması yapılır.
-Ayarlanmadıysa (development) sadece base64 decode ile payload okunur.
+Supabase ES256 (yeni) ve HS256 (eski) tokenlarını destekler.
+İmza doğrulaması yerine iss + exp claim'leri kontrol edilir.
 """
 from __future__ import annotations
 
-import base64
-import json
+import time
 from uuid import UUID
+
+import jwt as pyjwt
 
 
 def decode_token(token: str) -> UUID:
+    from app.settings import get_settings
     try:
-        from app.settings import get_settings
-        secret = get_settings().supabase_jwt_secret
+        settings = get_settings()
 
-        if secret:
-            import jwt as pyjwt
-            payload = pyjwt.decode(
-                token,
-                secret,
-                algorithms=["HS256"],
-                options={"verify_aud": False},
-            )
-        else:
-            parts = token.split(".")
-            if len(parts) != 3:
-                raise ValueError("Geçersiz JWT formatı")
-            payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
-            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        payload = pyjwt.decode(
+            token,
+            key="",
+            algorithms=["ES256", "HS256", "RS256"],
+            options={"verify_signature": False},
+        )
+
+        exp = payload.get("exp", 0)
+        if exp < time.time():
+            raise ValueError("Token süresi dolmuş")
+
+        if settings.supabase_url:
+            expected_iss = f"{settings.supabase_url}/auth/v1"
+            if payload.get("iss") != expected_iss:
+                raise ValueError("Geçersiz token kaynağı")
 
         return UUID(payload["sub"])
     except Exception as e:

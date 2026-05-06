@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { sendChat, listConversations, getConversationMessages } from "../api";
+import { sendChat, listConversations, getConversationMessages, getProfile } from "../api";
 import MessageBubble from "./MessageBubble";
 import MasteryPanel from "./MasteryPanel";
 import ConversationSidebar from "./ConversationSidebar";
@@ -11,6 +11,17 @@ const WELCOME = {
   role: "assistant",
   content: "Merhaba! Ben senin kişisel AI öğretmeniniyim. Hangi konuda çalışmak istiyorsun?",
 };
+
+// mastery state yapısı: { kc_id: { score, subject, label } }
+function profileToMasteryMap(profile) {
+  const map = {};
+  for (const [subject, kcs] of Object.entries(profile.mastery_by_subject || {})) {
+    for (const kc of kcs) {
+      map[kc.kc_id] = { score: kc.p_mastery, subject, label: kc.label };
+    }
+  }
+  return map;
+}
 
 export default function ChatPage({ auth }) {
   const { access_token: token, learner_id: learnerId } = auth;
@@ -27,10 +38,13 @@ export default function ChatPage({ auth }) {
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Oturum listesini yükle
+  // İlk yüklemede profil + sohbet listesini getir
   useEffect(() => {
     listConversations(token).then(setSessions);
-  }, [token]);
+    getProfile(token, learnerId).then((profile) => {
+      if (profile) setMastery(profileToMasteryMap(profile));
+    });
+  }, [token, learnerId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -51,12 +65,11 @@ export default function ChatPage({ auth }) {
     inputRef.current?.focus();
   }
 
-  // Yeni sohbet
+  // Yeni sohbet — mastery kullanıcıya ait, sıfırlanmaz
   function handleNewSession() {
     const id = generateSessionId();
     setCurrentSessionId(id);
     setMessages([WELCOME]);
-    setMastery({});
     setError("");
     inputRef.current?.focus();
   }
@@ -94,7 +107,23 @@ export default function ChatPage({ auth }) {
       ]);
 
       if (data.mastery_snapshot) {
-        setMastery((prev) => ({ ...prev, ...data.mastery_snapshot }));
+        setMastery((prev) => {
+          const next = { ...prev };
+          for (const [kc_id, score] of Object.entries(data.mastery_snapshot)) {
+            // subject = ilk part (ders), label = geri kalan partlar (konu+kavram)
+            const parts = kc_id.split("_");
+            const rawSubject = data.mastery_subjects?.[kc_id] || parts[0];
+            const subject = rawSubject.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+            const labelParts = parts.length > 1 ? parts.slice(1) : parts;
+            const label = labelParts.join(" ").replace(/\b\w/g, c => c.toUpperCase());
+            next[kc_id] = {
+              score,
+              subject: prev[kc_id]?.subject || subject,
+              label: prev[kc_id]?.label || label,
+            };
+          }
+          return next;
+        });
       }
 
       // Oturum listesini güncelle — başa taşı veya ekle

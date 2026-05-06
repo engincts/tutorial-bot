@@ -129,6 +129,11 @@ class PgVectorStore:
         )
         return result.rowcount  # type: ignore[attr-defined]
 
+    async def get_all_document_ids(self, session: AsyncSession) -> list[str]:
+        """Tüm benzersiz document_id (ders adı) değerlerini getirir."""
+        result = await session.execute(select(ContentChunk.document_id).distinct())
+        return list(result.scalars().all())
+
     # ── Interaction embeddings ────────────────────────────────────────
 
     async def log_interaction(

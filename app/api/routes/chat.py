@@ -26,6 +26,7 @@ class ChatOut(BaseModel):
     session_id: uuid.UUID
     kc_ids: list[str]
     mastery_snapshot: dict[str, float]
+    mastery_subjects: dict[str, str]
     model: str
     input_tokens: int
     output_tokens: int
@@ -64,6 +65,7 @@ async def chat(
         session_id=response.session_id,
         kc_ids=response.kc_ids,
         mastery_snapshot=response.mastery_snapshot,
+        mastery_subjects=response.mastery_subjects,
         model=response.model,
         input_tokens=response.input_tokens,
         output_tokens=response.output_tokens,

@@ -51,6 +51,7 @@ class ChatResponse:
     session_id: uuid.UUID
     kc_ids: list[str] = field(default_factory=list)
     mastery_snapshot: dict[str, float] = field(default_factory=dict)
+    mastery_subjects: dict[str, str] = field(default_factory=dict)
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
@@ -120,11 +121,13 @@ class ChatOrchestrator:
         )
 
         # ── 3. KC extraction + mastery ────────────────────────────────
+        course_names = await self._content_retriever.get_all_subjects(db_session)
         kc_ids, mastery_snapshot = await self._mastery_estimator.estimate_for_query(
             learner_id=request.learner_id,
             query=request.message,
             known_kc_ids=ctx.active_kc_ids,
             db_session=db_session,
+            course_names=course_names,
         )
 
         # ── 4. Misconceptions ─────────────────────────────────────────
@@ -166,7 +169,7 @@ class ChatOrchestrator:
             ctx.mastery_snapshot.upsert(kc)
         await self._session_manager.save(ctx)
 
-        # ── 9. Doğruluk tespiti + misconception + KT mastery update ──
+        # ── 9. Doğruluk tespiti + misconception (Mastery worker'da ölçülecek) ──
         correct, detected_misconceptions = await asyncio.gather(
             self._correctness_evaluator.evaluate(
                 user_message=request.message,
@@ -180,41 +183,15 @@ class ChatOrchestrator:
             ),
         )
 
-        new_mastery: dict[str, float] | None = None
-        if kc_ids:
-            # correct=None (belirsiz/soru) → True gibi davran (etkileşim = öğrenme sinyali)
-            effective_correct = correct if correct is not None else True
-            new_mastery = await self._mastery_estimator.update_after_interaction(
-                learner_id=request.learner_id,
-                kc_ids=kc_ids,
-                correct=effective_correct,
-            )
-            logger.debug("mastery updated | correct=%s effective=%s new=%s", correct, effective_correct, new_mastery)
-
-            # Session context'i güncel mastery ile tekrar kaydet
-            if new_mastery:
-                from app.domain.knowledge_component import KnowledgeComponent
-                for kc_id, p_mastery in new_mastery.items():
-                    ctx.mastery_snapshot.upsert(
-                        KnowledgeComponent(
-                            kc_id=kc_id,
-                            label=kc_id.replace("_", " ").title(),
-                            p_mastery=p_mastery,
-                        )
-                    )
-                await self._session_manager.save(ctx)
-
         if detected_misconceptions:
             logger.debug("misconceptions detected | %s", detected_misconceptions)
 
-        # kc_id'lerin ilk iki parçasından subject türet: "tyt_matematik_limit" → "tyt_matematik"
-        # Yoksa content chunk'ların document_id'si fallback olarak kullanılır
+        # KC ID'nin ilk parçası = ders (matematik, fizik…) — worker bunu DB'ye yazar
         subject: str | None = None
         if kc_ids:
             from collections import Counter
-            prefixes = ["_".join(k.split("_")[:2]) for k in kc_ids if "_" in k]
-            if prefixes:
-                subject = Counter(prefixes).most_common(1)[0][0]
+            first_parts = [k.split("_")[0] for k in kc_ids]
+            subject = Counter(first_parts).most_common(1)[0][0]
         if subject is None and content_chunks:
             from collections import Counter
             subject = Counter(c.document_id for c in content_chunks).most_common(1)[0][0]
@@ -226,12 +203,13 @@ class ChatOrchestrator:
             "interaction_type": InteractionType.QUESTION.value,
             "content_summary": request.message[:300],
             "kc_tags": kc_ids,
-            "new_mastery": new_mastery,
             "subject": subject,
             "misconceptions": [
                 {"kc_id": kc_id, "description": desc}
                 for kc_id, desc in detected_misconceptions
             ],
+            "user_message": request.message,
+            "assistant_response": llm_response.content,
         })
 
         logger.info(
@@ -239,14 +217,17 @@ class ChatOrchestrator:
             llm_response.model, llm_response.input_tokens, llm_response.output_tokens,
         )
 
+        merged_mastery = {
+            **{k: v.p_mastery for k, v in mastery_snapshot.components.items()}
+        }
+        mastery_subjects = {k: v.domain for k, v in mastery_snapshot.components.items()}
+
         return ChatResponse(
             content=llm_response.content,
             session_id=request.session_id,
             kc_ids=kc_ids,
-            mastery_snapshot={
-                **{k: v.p_mastery for k, v in mastery_snapshot.components.items()},
-                **(new_mastery or {}),
-            },
+            mastery_snapshot=merged_mastery,
+            mastery_subjects=mastery_subjects,
             model=llm_response.model,
             input_tokens=llm_response.input_tokens,
             output_tokens=llm_response.output_tokens,

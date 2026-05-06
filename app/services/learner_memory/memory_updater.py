@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -19,6 +18,7 @@ from app.domain.interaction import Interaction, Misconception
 from app.services.learner_memory.interaction_logger import InteractionLogger
 from app.services.learner_memory.misconception_store import MisconceptionStore
 from app.services.learner_memory.profile_retriever import ProfileRetriever
+from app.services.knowledge_tracing.llm_mastery_evaluator import LLMMasteryEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +30,13 @@ class MemoryUpdater:
         interaction_logger: InteractionLogger,
         misconception_store: MisconceptionStore,
         profile_retriever: ProfileRetriever,
+        mastery_evaluator: LLMMasteryEvaluator,
     ) -> None:
         self._session_factory = session_factory
         self._logger = interaction_logger
         self._misconception_store = misconception_store
         self._profile_retriever = profile_retriever
+        self._mastery_evaluator = mastery_evaluator
 
     async def update(
         self,
@@ -42,6 +44,8 @@ class MemoryUpdater:
         new_mastery: dict[str, float] | None = None,
         misconceptions: list[Misconception] | None = None,
         subject: str | None = None,
+        user_message: str | None = None,
+        assistant_response: str | None = None,
     ) -> None:
         """
         Tüm post-response güncellemelerini tek transaction'da yapar.
@@ -61,14 +65,28 @@ class MemoryUpdater:
                         description=misc.description,
                     )
 
-                # 3. KT mastery güncellemeleri
-                for kc_id, p_mastery in (new_mastery or {}).items():
+                # 3. LLM Mastery Evaluation (eğer new_mastery verilmemişse)
+                eval_mastery = new_mastery or {}
+                if not eval_mastery and user_message and assistant_response and interaction.kc_tags:
+                    snapshot = await self._profile_retriever.load_mastery_snapshot(session, interaction.learner_id, interaction.kc_tags)
+                    current_mastery = {kc.kc_id: kc.p_mastery for kc in snapshot.components.values()}
+                    eval_mastery = await self._mastery_evaluator.evaluate(
+                        user_message=user_message,
+                        assistant_response=assistant_response,
+                        kc_ids=interaction.kc_tags,
+                        current_mastery=current_mastery
+                    )
+
+                # 4. KT mastery güncellemeleri
+                for kc_id, p_mastery in eval_mastery.items():
+                    # KC ID'nin ilk parçası = ders; fallback olarak genel subject kullan
+                    per_kc_subject = kc_id.split("_")[0] or subject
                     await self._profile_retriever.upsert_kc_mastery(
                         session,
                         learner_id=interaction.learner_id,
                         kc_id=kc_id,
                         p_mastery=p_mastery,
-                        subject=subject,
+                        subject=per_kc_subject,
                     )
 
                 await session.commit()
@@ -86,6 +104,8 @@ class MemoryUpdater:
         new_mastery: dict[str, float] | None = None,
         misconceptions: list[Misconception] | None = None,
         subject: str | None = None,
+        user_message: str | None = None,
+        assistant_response: str | None = None,
     ) -> asyncio.Task:
         """
         asyncio.create_task() ile arka planda başlatır.
@@ -97,5 +117,7 @@ class MemoryUpdater:
                 new_mastery=new_mastery,
                 misconceptions=misconceptions,
                 subject=subject,
+                user_message=user_message,
+                assistant_response=assistant_response,
             )
         )
