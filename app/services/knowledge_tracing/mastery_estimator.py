@@ -62,11 +62,32 @@ class MasteryEstimator:
         snapshot = KCMasterySnapshot()
         for kc_id, p_mastery in mastery_map.items():
             db_kc = db_snapshot.components.get(kc_id)
-            parts = kc_id.split("_")
-            # İlk part = ders (matematik, fizik…); sonraki partlar = konu+kavram etiketi
-            subject = parts[0]
-            label_parts = parts[1:] if len(parts) > 1 else parts
-            label = " ".join(label_parts).replace("_", " ").title()
+            
+            # Ana ders adlarına (course_names) göre subject tespiti
+            subject = "Genel"
+            label_slug = kc_id
+            
+            if course_names:
+                # En uzun eşleşmeyi bulmak için uzunluğa göre ters sırala
+                sorted_courses = sorted(course_names, key=len, reverse=True)
+                for course in sorted_courses:
+                    if kc_id.startswith(course + "_"):
+                        subject = course
+                        label_slug = kc_id[len(course)+1:]
+                        break
+                    elif kc_id == course:
+                        subject = course
+                        label_slug = course
+                        break
+            
+            if subject == "Genel":
+                parts = kc_id.split("_")
+                subject = parts[0]
+                label_parts = parts[1:] if len(parts) > 1 else parts
+                label = " ".join(label_parts).replace("_", " ").title()
+            else:
+                label = label_slug.replace("_", " ").title()
+
             snapshot.upsert(
                 KnowledgeComponent(
                     kc_id=kc_id,

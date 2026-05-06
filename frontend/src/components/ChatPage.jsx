@@ -109,13 +109,19 @@ export default function ChatPage({ auth }) {
       if (data.mastery_snapshot) {
         setMastery((prev) => {
           const next = { ...prev };
+          const subjects = data.mastery_subjects || {};
+          
           for (const [kc_id, score] of Object.entries(data.mastery_snapshot)) {
-            // subject = ilk part (ders), label = geri kalan partlar (konu+kavram)
-            const parts = kc_id.split("_");
-            const rawSubject = data.mastery_subjects?.[kc_id] || parts[0];
+            const rawSubject = subjects[kc_id] || kc_id.split("_")[0];
             const subject = rawSubject.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-            const labelParts = parts.length > 1 ? parts.slice(1) : parts;
-            const label = labelParts.join(" ").replace(/\b\w/g, c => c.toUpperCase());
+            
+            // Eğer kc_id subject ile başlıyorsa label'dan subject'i çıkar
+            let labelSlug = kc_id;
+            if (kc_id.startsWith(rawSubject + "_")) {
+              labelSlug = kc_id.slice(rawSubject.length + 1);
+            }
+            const label = labelSlug.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
             next[kc_id] = {
               score,
               subject: prev[kc_id]?.subject || subject,
