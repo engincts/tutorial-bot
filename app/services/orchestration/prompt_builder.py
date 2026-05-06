@@ -24,9 +24,10 @@ from app.services.content_rag.retriever import RetrievedChunk
 
 
 class PromptBuilder:
-    def __init__(self, prompts_dir: str = "prompts") -> None:
+    def __init__(self, prompts_dir: str = "prompts", summarizer=None) -> None:
         self._prompts_dir = Path(prompts_dir)
         self._system_base: str | None = None
+        self._summarizer = summarizer
 
     def _get_system_base(self) -> str:
         if self._system_base is None:
@@ -34,7 +35,7 @@ class PromptBuilder:
             self._system_base = path.read_text(encoding="utf-8") if path.exists() else ""
         return self._system_base
 
-    def build(
+    async def build(
         self,
         user_query: str,
         profile: LearnerProfile,
@@ -96,7 +97,10 @@ class PromptBuilder:
 
         messages: list[Message] = [Message(role="system", content=system_prompt)]
 
-        # 8. Konuşma geçmişi
+        # 8. Konuşma geçmişi (uzunsa özetle)
+        if self._summarizer and len(conversation_history) > 10:
+            conversation_history = await self._summarizer.maybe_summarize(conversation_history)
+
         for turn in conversation_history:
             messages.append(Message(role=turn["role"], content=turn["content"]))
 

@@ -134,6 +134,12 @@ def get_memory_updater() -> MemoryUpdater:
 
 
 @lru_cache(maxsize=1)
+def _get_conversation_summarizer():
+    from app.services.orchestration.conversation_summarizer import ConversationSummarizer
+    return ConversationSummarizer(llm_client=get_llm_client())
+
+
+@lru_cache(maxsize=1)
 def get_chat_orchestrator() -> ChatOrchestrator:
     settings = get_settings()
     return ChatOrchestrator(
@@ -147,7 +153,9 @@ def get_chat_orchestrator() -> ChatOrchestrator:
         worker_queue=get_worker_queue(),
         session_manager=get_session_manager(),
         pedagogy_planner=PedagogyPlanner(settings=settings),
-        prompt_builder=PromptBuilder(),
+        prompt_builder=PromptBuilder(
+            summarizer=_get_conversation_summarizer()
+        ),
         correctness_evaluator=get_correctness_evaluator(),
         misconception_detector=get_misconception_detector(),
     )

@@ -1,9 +1,11 @@
-"""POST /chat"""
+"""POST /chat  &  POST /chat/stream (SSE)"""
 from __future__ import annotations
 
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,3 +75,44 @@ async def chat(
         input_tokens=response.input_tokens,
         output_tokens=response.output_tokens,
     )
+
+
+@router.post("/stream", dependencies=[Depends(rate_limit_dependency(60, 60))])
+async def chat_stream(
+    body: ChatIn,
+    learner_id: uuid.UUID = Depends(get_current_learner_id),
+    orchestrator: ChatOrchestrator = Depends(get_chat_orchestrator),
+    store: ChatStore = Depends(get_chat_store),
+    db: AsyncSession = Depends(get_session),
+):
+    """SSE streaming — token token yanıt döner."""
+    session_id = body.session_id or uuid.uuid4()
+
+    title = body.message[:60].strip() or "Yeni Sohbet"
+    await store.ensure_session(db, session_id, learner_id, title)
+    await store.add_message(db, session_id, learner_id, "user", body.message)
+
+    async def event_generator():
+        try:
+            full_content = ""
+            async for event in orchestrator.chat_stream(
+                request=ChatRequest(
+                    learner_id=learner_id,
+                    session_id=session_id,
+                    message=body.message,
+                ),
+                db_session=db,
+            ):
+                if event["type"] == "token":
+                    full_content += event["content"]
+                    yield f"data: {json.dumps(event)}\n\n"
+                elif event["type"] == "metadata":
+                    yield f"data: {json.dumps(event)}\n\n"
+                elif event["type"] == "done":
+                    yield f"data: {json.dumps(event)}\n\n"
+
+            await store.add_message(db, session_id, learner_id, "assistant", full_content)
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
