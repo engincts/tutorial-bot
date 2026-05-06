@@ -103,6 +103,22 @@ def get_misconception_detector() -> MisconceptionDetector:
 
 
 @lru_cache(maxsize=1)
+def get_llm_mastery_evaluator():
+    from app.services.knowledge_tracing.llm_mastery_evaluator import LLMMasteryEvaluator
+    return LLMMasteryEvaluator(llm_client=get_llm_client())
+
+
+@lru_cache(maxsize=1)
+def get_reflection_generator():
+    from app.services.learner_memory.reflection_generator import ReflectionGenerator
+    return ReflectionGenerator(llm_client=get_llm_client())
+
+@lru_cache(maxsize=1)
+def get_hallucination_monitor():
+    from app.services.orchestration.hallucination_monitor import HallucinationMonitor
+    return HallucinationMonitor(llm_client=get_llm_client())
+
+@lru_cache(maxsize=1)
 def get_memory_updater() -> MemoryUpdater:
     embedder = get_embedder()
     vector_store = get_vector_store()
@@ -111,7 +127,16 @@ def get_memory_updater() -> MemoryUpdater:
         interaction_logger=InteractionLogger(embedder=embedder, vector_store=vector_store),
         misconception_store=get_misconception_store(),
         profile_retriever=get_profile_retriever(),
+        mastery_evaluator=get_llm_mastery_evaluator(),
+        reflection_generator=get_reflection_generator(),
+        hallucination_monitor=get_hallucination_monitor(),
     )
+
+
+@lru_cache(maxsize=1)
+def _get_conversation_summarizer():
+    from app.services.orchestration.conversation_summarizer import ConversationSummarizer
+    return ConversationSummarizer(llm_client=get_llm_client())
 
 
 @lru_cache(maxsize=1)
@@ -128,7 +153,9 @@ def get_chat_orchestrator() -> ChatOrchestrator:
         worker_queue=get_worker_queue(),
         session_manager=get_session_manager(),
         pedagogy_planner=PedagogyPlanner(settings=settings),
-        prompt_builder=PromptBuilder(),
+        prompt_builder=PromptBuilder(
+            summarizer=_get_conversation_summarizer()
+        ),
         correctness_evaluator=get_correctness_evaluator(),
         misconception_detector=get_misconception_detector(),
     )

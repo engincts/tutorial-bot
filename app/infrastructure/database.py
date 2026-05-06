@@ -23,8 +23,8 @@ class Base(DeclarativeBase):
 def build_engine(settings: Settings) -> AsyncEngine:
     return create_async_engine(
         f"postgresql+asyncpg:///{settings.postgres_db}",
-        pool_size=10,
-        max_overflow=20,
+        pool_size=settings.postgres_pool_size,
+        max_overflow=settings.postgres_max_overflow,
         pool_pre_ping=True,
         echo=(settings.app_env.value == "development"),
         connect_args={

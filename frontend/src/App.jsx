@@ -1,30 +1,47 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import LoginPage from "./components/LoginPage";
 import ChatPage from "./components/ChatPage";
 import ProfilePage from "./components/ProfilePage";
 import styles from "./App.module.css";
+import { supabase } from "./supabase";
 
 export default function App() {
-  const [auth, setAuth] = useState(() => {
-    try {
-      const raw = localStorage.getItem("tb_auth");
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [auth, setAuth] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
   const [tab, setTab] = useState("chat");
 
+  useEffect(() => {
+    // Sayfa yüklendiğinde mevcut oturumu kontrol et
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setAuth({ access_token: session.access_token, learner_id: session.user.id, email: session.user.email });
+      }
+      setAuthReady(true);
+    });
+
+    // Token yenilendiğinde veya oturum değiştiğinde güncelle
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setAuth({ access_token: session.access_token, learner_id: session.user.id, email: session.user.email });
+      } else {
+        setAuth(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   function handleLogin(data) {
-    localStorage.setItem("tb_auth", JSON.stringify(data));
     setAuth(data);
     setTab("chat");
   }
 
-  function handleLogout() {
-    localStorage.removeItem("tb_auth");
+  async function handleLogout() {
+    await supabase.auth.signOut();
     setAuth(null);
   }
+
+  if (!authReady) return null;
 
   if (!auth) return <LoginPage onLogin={handleLogin} />;
 

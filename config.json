@@ -27,7 +27,7 @@
   "retrieval": {
     "content_top_k": 5,
     "memory_top_k": 3,
-    "rerank_enabled": false
+    "rerank_enabled": true
   },
   "pedagogy": {
     "mastery_threshold_low": 0.4,

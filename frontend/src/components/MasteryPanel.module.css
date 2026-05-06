@@ -44,40 +44,124 @@
   margin-bottom: 4px;
 }
 
-/* ── KC list ─────────────────────────────────────────────── */
-.list {
+/* ── Subject groups ──────────────────────────────────────── */
+.groups {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   flex: 1;
   overflow-y: auto;
 }
 
-.item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
-.itemHeader {
+.groupHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: none;
+  cursor: pointer;
+  gap: 8px;
+  transition: background .15s;
+}
+.groupHeader:hover { background: var(--surface-3); }
+
+.groupLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.groupArrow {
+  font-size: 11px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.groupName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.groupCount {
+  font-size: 10px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.groupRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.groupBar {
+  width: 60px;
+  height: 5px;
+  background: var(--surface-3);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.groupFill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width .5s ease;
+}
+
+.groupPct {
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 30px;
+  text-align: right;
+}
+
+.kcList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  background: var(--surface);
+}
+
+/* ── KC item ─────────────────────────────────────────────── */
+.kcItem {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.kcHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .kcName {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text);
-  text-transform: capitalize;
+  color: var(--text-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 160px;
+  max-width: 150px;
 }
 
-.pct {
-  font-size: 13px;
+.kcPct {
+  font-size: 12px;
   font-weight: 600;
   flex-shrink: 0;
 }

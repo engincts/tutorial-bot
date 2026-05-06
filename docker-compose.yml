@@ -25,6 +25,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
+      - ./app:/app/app
       - ./checkpoints:/app/checkpoints
       - ./prompts:/app/prompts
       - ./logs:/app/logs
@@ -44,6 +45,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
+      - ./app:/app/app
       - ./logs:/app/logs
       - ./config.json:/app/config.json
     restart: unless-stopped

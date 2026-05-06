@@ -31,6 +31,7 @@ class MasteryEstimator:
         query: str,
         known_kc_ids: list[str] | None = None,
         db_session: AsyncSession | None = None,
+        course_names: list[str] | None = None,
     ) -> tuple[list[str], KCMasterySnapshot]:
         """
         1. Sorgudan KC etiketleri çıkar
@@ -38,13 +39,14 @@ class MasteryEstimator:
         3. O KC'ler için mastery tahminleri al
         4. KCMasterySnapshot döner
         """
-        extracted = await self._mapper.extract(query)
+        extracted = await self._mapper.extract(query, course_names=course_names)
         kc_ids = list(dict.fromkeys((known_kc_ids or []) + extracted))
 
         if not kc_ids:
             return [], KCMasterySnapshot()
 
         # DB'den mastery değerlerini yükleyip tracer'ı seed et
+        db_snapshot = KCMasterySnapshot()
         if db_session is not None:
             db_snapshot = await self._profile_retriever.load_mastery_snapshot(
                 db_session, learner_id, kc_ids
@@ -59,11 +61,18 @@ class MasteryEstimator:
 
         snapshot = KCMasterySnapshot()
         for kc_id, p_mastery in mastery_map.items():
+            db_kc = db_snapshot.components.get(kc_id)
+            parts = kc_id.split("_")
+            # İlk part = ders (matematik, fizik…); sonraki partlar = konu+kavram etiketi
+            subject = parts[0]
+            label_parts = parts[1:] if len(parts) > 1 else parts
+            label = " ".join(label_parts).replace("_", " ").title()
             snapshot.upsert(
                 KnowledgeComponent(
                     kc_id=kc_id,
-                    label=kc_id.replace("_", " ").title(),
+                    label=label,
                     p_mastery=p_mastery,
+                    domain=db_kc.domain if (db_kc and db_kc.domain != "genel") else subject,
                 )
             )
 

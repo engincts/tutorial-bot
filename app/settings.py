@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     postgres_user: str = "tutorbot"
     postgres_password: str = Field(default="tutorbot_dev", repr=False)
     postgres_ssl: str = "disable"  # "disable" | "require"
+    postgres_pool_size: int = 10
+    postgres_max_overflow: int = 20
 
     # ── Redis ────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"
@@ -85,6 +87,7 @@ class Settings(BaseSettings):
     # ── App ──────────────────────────────────────────────────────────
     app_env: AppEnv = AppEnv.DEVELOPMENT
     log_level: str = "INFO"
+    allowed_origins: list[str] = Field(default_factory=lambda: ["*"])
 
     # ── Supabase ─────────────────────────────────────────────────────
     supabase_url: str = Field(default="", repr=False)
@@ -137,6 +140,14 @@ class Settings(BaseSettings):
                 "OPENAI_API_KEY zorunlu — EMBEDDER_PROVIDER=openai seçildiğinde "
                 "bu değer boş bırakılamaz."
             )
+            
+        if self.app_env == AppEnv.PRODUCTION:
+            if not self.supabase_jwt_secret:
+                raise ValueError("SUPABASE_JWT_SECRET zorunlu — Production ortamında boş bırakılamaz.")
+        elif not self.supabase_jwt_secret:
+            import logging
+            logging.getLogger(__name__).warning("SUPABASE_JWT_SECRET boş. Development modunda token doğrulama hatalı çalışabilir.")
+            
         return self
 
 

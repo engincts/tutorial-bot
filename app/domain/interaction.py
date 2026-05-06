@@ -17,6 +17,7 @@ class InteractionType(StrEnum):
     SUCCESS = "success"              # doğru cevap / kavrama
     STRUGGLE = "struggle"            # tekrarlayan yanlış / takılma
     HINT_REQUESTED = "hint_requested"
+    REFLECTION = "reflection"         # periyodik öğrenci özeti
 
 
 @dataclass

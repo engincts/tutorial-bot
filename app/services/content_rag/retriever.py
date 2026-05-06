@@ -42,6 +42,9 @@ class ContentRetriever:
     async def embed(self, text: str) -> list[float]:
         return await self._embedder.embed(text)
 
+    async def get_all_subjects(self, session: AsyncSession) -> list[str]:
+        return await self._store.get_all_document_ids(session)
+
     async def retrieve(
         self,
         session: AsyncSession,
@@ -60,6 +63,7 @@ class ContentRetriever:
 
         raw_chunks: list[ContentChunk] = await self._store.search_content(
             session=session,
+            query=query,
             query_embedding=query_embedding,
             top_k=k,
             kc_filter=kc_filter,

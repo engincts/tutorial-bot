@@ -105,21 +105,64 @@ class PgVectorStore:
     async def search_content(
         self,
         session: AsyncSession,
+        query: str,
         query_embedding: list[float],
         top_k: int = 5,
         kc_filter: list[str] | None = None,
     ) -> list[ContentChunk]:
-        """Cosine similarity ile en yakın content chunk'larını getirir."""
-        stmt = (
-            select(ContentChunk)
-            .order_by(ContentChunk.embedding.cosine_distance(query_embedding))
-            .limit(top_k)
-        )
+        """Hybrid search (Dense + Sparse pg_trgm) with RRF (Reciprocal Rank Fusion)."""
+        # CTEs for dense and sparse rankings
+        filter_clause = ""
         if kc_filter:
-            stmt = stmt.where(ContentChunk.kc_tags.overlap(kc_filter))
+            # Postgres ARRAY overlap operator
+            formatted_filter = "ARRAY[" + ",".join([f"'{k}'" for k in kc_filter]) + "]::varchar[]"
+            filter_clause = f"WHERE kc_tags && {formatted_filter}"
 
-        result = await session.execute(stmt)
-        return list(result.scalars().all())
+        sql = f"""
+        WITH dense_search AS (
+            SELECT id, 
+                   row_number() OVER (ORDER BY embedding <=> :embedding::vector) as rank
+            FROM curriculum_chunks
+            {filter_clause}
+            LIMIT 50
+        ),
+        sparse_search AS (
+            SELECT id,
+                   row_number() OVER (ORDER BY similarity(content, :query) DESC) as rank
+            FROM curriculum_chunks
+            {filter_clause}
+            LIMIT 50
+        ),
+        rrf AS (
+            SELECT
+                COALESCE(d.id, s.id) as id,
+                COALESCE(1.0 / (60 + d.rank), 0.0) + COALESCE(1.0 / (60 + s.rank), 0.0) as rrf_score
+            FROM dense_search d
+            FULL OUTER JOIN sparse_search s ON d.id = s.id
+            ORDER BY rrf_score DESC
+            LIMIT :top_k
+        )
+        SELECT c.*
+        FROM curriculum_chunks c
+        JOIN rrf r ON c.id = r.id
+        ORDER BY r.rrf_score DESC;
+        """
+        
+        result = await session.execute(
+            text(sql),
+            {"embedding": query_embedding, "query": query, "top_k": top_k}
+        )
+        
+        # We need to map raw rows back to ContentChunk models
+        # But text() returns Row objects, not ORM models directly
+        # Let's use session.scalars with FromStatement
+        
+        stmt = select(ContentChunk).from_statement(text(sql))
+        result_orm = await session.scalars(
+            stmt,
+            {"embedding": query_embedding, "query": query, "top_k": top_k}
+        )
+        return list(result_orm.all())
 
     async def delete_document(self, session: AsyncSession, document_id: str) -> int:
         """Bir dökümana ait tüm chunk'ları siler. Kaç satır silindiğini döner."""
@@ -128,6 +171,11 @@ class PgVectorStore:
             .bindparams(doc_id=document_id)
         )
         return result.rowcount  # type: ignore[attr-defined]
+
+    async def get_all_document_ids(self, session: AsyncSession) -> list[str]:
+        """Tüm benzersiz document_id (ders adı) değerlerini getirir."""
+        result = await session.execute(select(ContentChunk.document_id).distinct())
+        return list(result.scalars().all())
 
     # ── Interaction embeddings ────────────────────────────────────────
 
