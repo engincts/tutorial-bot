@@ -11,6 +11,7 @@ from app.api.dependencies import get_chat_orchestrator, get_chat_store
 from app.api.dependencies_auth import get_current_learner_id
 from app.infrastructure.chat_store import ChatStore
 from app.infrastructure.database import get_session
+from app.api.middleware.rate_limit import rate_limit_dependency
 from app.services.orchestration.chat_orchestrator import ChatOrchestrator, ChatRequest
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -27,12 +28,13 @@ class ChatOut(BaseModel):
     kc_ids: list[str]
     mastery_snapshot: dict[str, float]
     mastery_subjects: dict[str, str]
+    retrieved_sources: list[dict]
     model: str
     input_tokens: int
     output_tokens: int
 
 
-@router.post("", response_model=ChatOut)
+@router.post("", response_model=ChatOut, dependencies=[Depends(rate_limit_dependency(60, 60))])
 async def chat(
     body: ChatIn,
     learner_id: uuid.UUID = Depends(get_current_learner_id),
@@ -66,6 +68,7 @@ async def chat(
         kc_ids=response.kc_ids,
         mastery_snapshot=response.mastery_snapshot,
         mastery_subjects=response.mastery_subjects,
+        retrieved_sources=response.retrieved_sources,
         model=response.model,
         input_tokens=response.input_tokens,
         output_tokens=response.output_tokens,

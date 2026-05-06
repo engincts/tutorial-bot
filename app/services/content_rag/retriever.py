@@ -63,6 +63,7 @@ class ContentRetriever:
 
         raw_chunks: list[ContentChunk] = await self._store.search_content(
             session=session,
+            query=query,
             query_embedding=query_embedding,
             top_k=k,
             kc_filter=kc_filter,

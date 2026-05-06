@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, EmailStr
 from supabase._async.client import AsyncClient, create_client
 
 from app.settings import get_settings
+from app.api.middleware.rate_limit import rate_limit_dependency
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -42,7 +43,7 @@ class TokenOut(BaseModel):
     email: str
 
 
-@router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(rate_limit_dependency(5, 3600))])
 async def register(body: RegisterIn) -> TokenOut:
     client = await _admin_client()
     try:
@@ -74,7 +75,7 @@ async def register(body: RegisterIn) -> TokenOut:
     )
 
 
-@router.post("/login", response_model=TokenOut)
+@router.post("/login", response_model=TokenOut, dependencies=[Depends(rate_limit_dependency(10, 60))])
 async def login(body: LoginIn) -> TokenOut:
     client = await _anon_client()
     try:

@@ -109,6 +109,16 @@ def get_llm_mastery_evaluator():
 
 
 @lru_cache(maxsize=1)
+def get_reflection_generator():
+    from app.services.learner_memory.reflection_generator import ReflectionGenerator
+    return ReflectionGenerator(llm_client=get_llm_client())
+
+@lru_cache(maxsize=1)
+def get_hallucination_monitor():
+    from app.services.orchestration.hallucination_monitor import HallucinationMonitor
+    return HallucinationMonitor(llm_client=get_llm_client())
+
+@lru_cache(maxsize=1)
 def get_memory_updater() -> MemoryUpdater:
     embedder = get_embedder()
     vector_store = get_vector_store()
@@ -118,6 +128,8 @@ def get_memory_updater() -> MemoryUpdater:
         misconception_store=get_misconception_store(),
         profile_retriever=get_profile_retriever(),
         mastery_evaluator=get_llm_mastery_evaluator(),
+        reflection_generator=get_reflection_generator(),
+        hallucination_monitor=get_hallucination_monitor(),
     )
 
 

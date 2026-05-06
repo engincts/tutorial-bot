@@ -52,6 +52,7 @@ class ChatResponse:
     kc_ids: list[str] = field(default_factory=list)
     mastery_snapshot: dict[str, float] = field(default_factory=dict)
     mastery_subjects: dict[str, str] = field(default_factory=dict)
+    retrieved_sources: list[dict] = field(default_factory=list)
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
@@ -138,7 +139,7 @@ class ChatOrchestrator:
         )
 
         # ── 5. Pedagoji stratejisi ────────────────────────────────────
-        pedagogy_directive = self._pedagogy_planner.select_strategy(mastery_snapshot)
+        pedagogy_directive = await self._pedagogy_planner.select_strategy(mastery_snapshot, db_session)
 
         # ── 6. Prompt inşa et ─────────────────────────────────────────
         messages = self._prompt_builder.build(
@@ -210,6 +211,7 @@ class ChatOrchestrator:
             ],
             "user_message": request.message,
             "assistant_response": llm_response.content,
+            "context_used": "\n".join([c.content[:200] for c in content_chunks])  # Sadece kısa özet
         })
 
         logger.info(
@@ -221,6 +223,10 @@ class ChatOrchestrator:
             **{k: v.p_mastery for k, v in mastery_snapshot.components.items()}
         }
         mastery_subjects = {k: v.domain for k, v in mastery_snapshot.components.items()}
+        retrieved_sources = [
+            {"document_id": c.document_id, "chunk_index": c.chunk_index, "content_preview": c.content[:100]}
+            for c in content_chunks
+        ]
 
         return ChatResponse(
             content=llm_response.content,
@@ -228,6 +234,7 @@ class ChatOrchestrator:
             kc_ids=kc_ids,
             mastery_snapshot=merged_mastery,
             mastery_subjects=mastery_subjects,
+            retrieved_sources=retrieved_sources,
             model=llm_response.model,
             input_tokens=llm_response.input_tokens,
             output_tokens=llm_response.output_tokens,

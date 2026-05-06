@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
-from app.api.routes import auth, chat, conversations, ingest, profile, session
+from app.api.routes import auth, chat, conversations, ingest, profile, session, quiz
 from app.infrastructure.database import close_db, init_db
 from app.infrastructure.redis_client import close_redis, init_redis
 from app.logging_config import configure_logging
@@ -61,7 +61,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.allowed_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -72,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(ingest.router)
     app.include_router(profile.router)
     app.include_router(session.router)
+    app.include_router(quiz.router)
 
     @app.get("/health")
     async def health():
@@ -94,7 +95,16 @@ def create_app() -> FastAPI:
         except Exception:
             checks["database"] = "error"
 
-        checks["status"] = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
+        try:
+            redis_client = get_redis()
+            dlq_size = await redis_client.llen("worker:memory_dlq")
+            checks["dlq_size"] = dlq_size
+            if dlq_size > 10:
+                logger.error("CRITICAL: DLQ size exceeded threshold: %d", dlq_size)
+        except Exception:
+            checks["dlq_size"] = "error"
+
+        checks["status"] = "ok" if checks.get("redis") == "ok" and checks.get("database") == "ok" else "degraded"
         return checks
 
     return app

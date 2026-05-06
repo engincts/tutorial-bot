@@ -13,12 +13,16 @@ import asyncio
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from typing import TYPE_CHECKING
 
 from app.domain.interaction import Interaction, Misconception
 from app.services.learner_memory.interaction_logger import InteractionLogger
-from app.services.learner_memory.misconception_store import MisconceptionStore
 from app.services.learner_memory.profile_retriever import ProfileRetriever
 from app.services.knowledge_tracing.llm_mastery_evaluator import LLMMasteryEvaluator
+from app.services.learner_memory.reflection_generator import ReflectionGenerator
+
+if TYPE_CHECKING:
+    from app.services.orchestration.hallucination_monitor import HallucinationMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +35,16 @@ class MemoryUpdater:
         misconception_store: MisconceptionStore,
         profile_retriever: ProfileRetriever,
         mastery_evaluator: LLMMasteryEvaluator,
+        reflection_generator: ReflectionGenerator | None = None,
+        hallucination_monitor: 'HallucinationMonitor' | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._logger = interaction_logger
         self._misconception_store = misconception_store
         self._profile_retriever = profile_retriever
         self._mastery_evaluator = mastery_evaluator
+        self._reflection_generator = reflection_generator
+        self._hallucination_monitor = hallucination_monitor
 
     async def update(
         self,
@@ -46,6 +54,7 @@ class MemoryUpdater:
         subject: str | None = None,
         user_message: str | None = None,
         assistant_response: str | None = None,
+        context_used: str | None = None,
     ) -> None:
         """
         Tüm post-response güncellemelerini tek transaction'da yapar.
@@ -89,6 +98,44 @@ class MemoryUpdater:
                         subject=per_kc_subject,
                     )
 
+                # 5. Reflection tetiklemesi
+                if self._reflection_generator:
+                    reflection = await self._reflection_generator.generate_reflection(session, interaction.learner_id)
+                    if reflection:
+                        import json
+                        # Log it as a new interaction
+                        from app.domain.interaction import InteractionType
+                        ref_interaction = Interaction(
+                            learner_id=interaction.learner_id,
+                            session_id=interaction.session_id,
+                            interaction_type=InteractionType("reflection"),
+                            content_summary=json.dumps(reflection),
+                            kc_tags=[]
+                        )
+                        await self._logger.log(session, ref_interaction)
+                        
+                        # update profile preferences
+                        profile = await self._profile_retriever.get_profile(session, interaction.learner_id)
+                        if profile:
+                            prefs = json.loads(profile.preferences) if profile.preferences else {}
+                            prefs["last_reflection"] = reflection
+                            from sqlalchemy import update, text
+                            from sqlalchemy.dialects.postgresql import UUID
+                            await session.execute(
+                                text("UPDATE student_profiles SET preferences = :prefs WHERE id = :lid")
+                                .bindparams(prefs=json.dumps(prefs), lid=profile.learner_id)
+                            )
+                            
+                # 6. Hallucination check
+                if self._hallucination_monitor and assistant_response and context_used:
+                    await self._hallucination_monitor.evaluate(
+                        session=session,
+                        learner_id=interaction.learner_id,
+                        session_id=interaction.session_id,
+                        assistant_response=assistant_response,
+                        context_used=context_used,
+                    )
+                
                 await session.commit()
 
         except Exception:

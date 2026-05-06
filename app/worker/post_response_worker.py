@@ -52,7 +52,8 @@ async def _process(job: dict) -> None:
         misconceptions=misconceptions or None,
         subject=job.get("subject"),
         user_message=job.get("user_message"),
-        assistant_response=job.get("assistant_response")
+        assistant_response=job.get("assistant_response"),
+        context_used=job.get("context_used")
     )
     logger.info(
         "job işlendi | learner=%s kc=%s mastery_updated=%s misconceptions=%d",
