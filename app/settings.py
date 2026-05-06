@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     postgres_db: str = "tutorbot"
     postgres_user: str = "tutorbot"
     postgres_password: str = Field(default="tutorbot_dev", repr=False)
+    postgres_ssl: str = "disable"  # "disable" | "require"
 
     # ── Redis ────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"
@@ -97,15 +98,6 @@ class Settings(BaseSettings):
     def postgres_dsn(self) -> str:
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        )
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def postgres_dsn_sync(self) -> str:
-        """Alembic migration'ları için sync DSN."""
-        return (
-            f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 

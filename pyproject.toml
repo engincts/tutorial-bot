@@ -32,15 +32,12 @@ dependencies = [
 
     # Auth
     "python-jose[cryptography]>=3.3.0",
+    "PyJWT>=2.8.0",
     "supabase>=2.0.0",
 
     # LLM providers
     "openai>=1.30.0",
     "anthropic>=0.28.0",
-
-    # Embeddings
-    "sentence-transformers>=3.0.0",
-    "torch>=2.3.0",
 
     # Text processing
     "tiktoken>=0.7.0",
@@ -52,9 +49,6 @@ dependencies = [
     "httpx>=0.27.0",
     "tenacity>=8.3.0",
 
-    # Knowledge tracing (PyTorch tabanlı)
-    "numpy>=1.26.0",
-    "scikit-learn>=1.5.0",
 ]
 
 [project.optional-dependencies]

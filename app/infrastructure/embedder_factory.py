@@ -8,8 +8,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from functools import lru_cache
 
-import numpy as np
-
 from app.settings import EmbedderProvider, Settings, get_settings
 
 
@@ -66,6 +64,13 @@ class BGEM3Embedder(BaseEmbedder):
 # ── OpenAI Embedder ───────────────────────────────────────────────────────────
 
 
+_OPENAI_EMBEDDING_DIMS: dict[str, int] = {
+    "text-embedding-3-large": 3072,
+    "text-embedding-3-small": 1536,
+    "text-embedding-ada-002": 1536,
+}
+
+
 class OpenAIEmbedder(BaseEmbedder):
     def __init__(self, settings: Settings) -> None:
         from openai import AsyncOpenAI
@@ -84,12 +89,11 @@ class OpenAIEmbedder(BaseEmbedder):
             input=texts,
             model=self._model,
         )
-        # OpenAI garantisi: sıra korunur
         return [item.embedding for item in response.data]
 
     @property
     def dim(self) -> int:
-        return 3072  # text-embedding-3-large varsayılan
+        return _OPENAI_EMBEDDING_DIMS.get(self._model, 1536)
 
 
 # ── Novita Embedder (OpenAI-compatible) ──────────────────────────────────────
@@ -109,9 +113,13 @@ class NovitaEmbedder(BaseEmbedder):
         response = await self._client.embeddings.create(input=text, model=self._model)
         return response.data[0].embedding
 
-    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        response = await self._client.embeddings.create(input=texts, model=self._model)
-        return [item.embedding for item in response.data]
+    async def embed_batch(self, texts: list[str], _batch_size: int = 20) -> list[list[float]]:
+        results: list[list[float]] = []
+        for i in range(0, len(texts), _batch_size):
+            batch = texts[i: i + _batch_size]
+            response = await self._client.embeddings.create(input=batch, model=self._model)
+            results.extend(item.embedding for item in response.data)
+        return results
 
     @property
     def dim(self) -> int:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -16,6 +17,7 @@ router = APIRouter(prefix="/profile", tags=["profile"])
 
 class KCMasteryOut(BaseModel):
     kc_id: str
+    label: str
     p_mastery: float
     attempts: int
 
@@ -25,7 +27,12 @@ class ProfileOut(BaseModel):
     display_name: str
     preferred_language: str
     preferences: dict
-    mastery: list[KCMasteryOut]
+    mastery_by_subject: dict[str, list[KCMasteryOut]]
+
+
+def _format_subject(raw: str) -> str:
+    """'tyt_matematik' → 'TYT Matematik'"""
+    return raw.replace("_", " ").title()
 
 
 @router.get("/{learner_id}", response_model=ProfileOut)
@@ -37,13 +44,22 @@ async def get_profile(
     profile = await retriever.get_or_create(db, learner_id)
     snapshot = await retriever.load_mastery_snapshot(db, learner_id)
 
+    grouped: dict[str, list[KCMasteryOut]] = defaultdict(list)
+    for kc in sorted(snapshot.components.values(), key=lambda k: -k.p_mastery):
+        subject_key = _format_subject(kc.domain)
+        grouped[subject_key].append(
+            KCMasteryOut(
+                kc_id=kc.kc_id,
+                label=kc.label,
+                p_mastery=kc.p_mastery,
+                attempts=kc.attempts,
+            )
+        )
+
     return ProfileOut(
         learner_id=profile.id,
         display_name=profile.display_name,
         preferred_language=profile.preferred_language,
         preferences=profile.preferences,
-        mastery=[
-            KCMasteryOut(kc_id=kc.kc_id, p_mastery=kc.p_mastery, attempts=kc.attempts)
-            for kc in snapshot.components.values()
-        ],
+        mastery_by_subject=dict(grouped),
     )

@@ -41,6 +41,7 @@ class MemoryUpdater:
         interaction: Interaction,
         new_mastery: dict[str, float] | None = None,
         misconceptions: list[Misconception] | None = None,
+        subject: str | None = None,
     ) -> None:
         """
         Tüm post-response güncellemelerini tek transaction'da yapar.
@@ -67,6 +68,7 @@ class MemoryUpdater:
                         learner_id=interaction.learner_id,
                         kc_id=kc_id,
                         p_mastery=p_mastery,
+                        subject=subject,
                     )
 
                 await session.commit()
@@ -83,6 +85,7 @@ class MemoryUpdater:
         interaction: Interaction,
         new_mastery: dict[str, float] | None = None,
         misconceptions: list[Misconception] | None = None,
+        subject: str | None = None,
     ) -> asyncio.Task:
         """
         asyncio.create_task() ile arka planda başlatır.
@@ -93,5 +96,6 @@ class MemoryUpdater:
                 interaction=interaction,
                 new_mastery=new_mastery,
                 misconceptions=misconceptions,
+                subject=subject,
             )
         )

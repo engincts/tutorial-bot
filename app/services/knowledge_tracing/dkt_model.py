@@ -38,6 +38,14 @@ class DKTModel(BaseKnowledgeTracer):
         # {learner_id: {kc_id: p_mastery}}
         self._state: dict[str, dict[str, float]] = {}
 
+    def seed_state(self, learner_id: uuid.UUID, mastery_dict: dict[str, float]) -> None:
+        lid = str(learner_id)
+        if lid not in self._state:
+            self._state[lid] = {}
+        for kc_id, p_mastery in mastery_dict.items():
+            if kc_id not in self._state[lid]:
+                self._state[lid][kc_id] = p_mastery
+
     async def estimate(
         self,
         learner_id: uuid.UUID,

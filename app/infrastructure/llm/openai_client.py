@@ -10,7 +10,7 @@ from app.settings import Settings
 
 class OpenAIClient(BaseLLMClient):
     def __init__(self, settings: Settings) -> None:
-        self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self._client = AsyncOpenAI(api_key=settings.openai_api_key, timeout=60.0)
         self._model = settings.openai_model
 
     @retry(

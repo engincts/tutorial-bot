@@ -62,6 +62,13 @@ class AKTModel(BaseKnowledgeTracer):
             path,
         )
 
+    def seed_state(self, learner_id: uuid.UUID, mastery_dict: dict[str, float]) -> None:
+        lid = str(learner_id)
+        for kc_id, p_mastery in mastery_dict.items():
+            state = self._get_state(lid, kc_id)
+            if state.attempts == 0:
+                state.p_mastery = p_mastery
+
     def _get_state(self, lid: str, kc_id: str) -> _KCState:
         if lid not in self._state:
             self._state[lid] = {}

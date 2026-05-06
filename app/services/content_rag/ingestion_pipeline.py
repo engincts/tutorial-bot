@@ -60,8 +60,10 @@ class IngestionPipeline:
             return IngestionResult(document_id=document_id, chunks_written=0, chars_total=0)
 
         # Batch embed — tüm chunk'ları tek API çağrısıyla embed et
+        logger.info("%s: %d chunk embed ediliyor...", document_id, len(chunks))
         texts = [c.text for c in chunks]
         embeddings = await self._embedder.embed_batch(texts)
+        logger.info("%s: embed tamamlandı, DB'ye yazılıyor...", document_id)
 
         for chunk, embedding in zip(chunks, embeddings):
             chunk_meta = {**(metadata or {}), "heading": chunk.heading}
@@ -98,11 +100,13 @@ class IngestionPipeline:
     ) -> IngestionResult:
         """PDF'yi metne çevirir, ardından ingest_text'e iletir."""
         try:
-            import pypdf
             import io
+            import pypdf
             reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+            logger.info("%s: %d sayfalık PDF okunuyor...", document_id, len(reader.pages))
             pages = [page.extract_text() or "" for page in reader.pages]
             text = "\n\n".join(pages)
+            logger.info("%s: PDF metne çevrildi (%d karakter)", document_id, len(text))
         except Exception as exc:
             logger.error("PDF parse hatası (%s): %s", document_id, exc)
             raise

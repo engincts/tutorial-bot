@@ -30,7 +30,6 @@ def test_postgres_dsn_format():
         postgres_db="mydb",
     )
     assert s.postgres_dsn == "postgresql+asyncpg://user:pass@db:5432/mydb"
-    assert s.postgres_dsn_sync == "postgresql://user:pass@db:5432/mydb"
 
 
 def test_openai_key_required_in_production():

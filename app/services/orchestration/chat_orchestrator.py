@@ -22,14 +22,16 @@ logger = logging.getLogger(__name__)
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.interaction import Interaction, InteractionType
+from app.domain.interaction import InteractionType
 from app.infrastructure.llm.base import BaseLLMClient, LLMResponse
 from app.infrastructure.pg_vector_store import PgVectorStore
+from app.infrastructure.redis_client import WorkerQueue
 from app.services.content_rag.retriever import ContentRetriever
 from app.services.knowledge_tracing.mastery_estimator import MasteryEstimator
-from app.services.learner_memory.memory_updater import MemoryUpdater
 from app.services.learner_memory.misconception_store import MisconceptionStore
 from app.services.learner_memory.profile_retriever import ProfileRetriever
+from app.services.orchestration.correctness_evaluator import CorrectnessEvaluator
+from app.services.orchestration.misconception_detector import MisconceptionDetector
 from app.services.orchestration.pedagogy_planner import PedagogyPlanner
 from app.services.orchestration.prompt_builder import PromptBuilder
 from app.services.orchestration.session_manager import SessionManager
@@ -64,10 +66,12 @@ class ChatOrchestrator:
         profile_retriever: ProfileRetriever,
         misconception_store: MisconceptionStore,
         mastery_estimator: MasteryEstimator,
-        memory_updater: MemoryUpdater,
+        worker_queue: WorkerQueue,
         session_manager: SessionManager,
         pedagogy_planner: PedagogyPlanner,
         prompt_builder: PromptBuilder,
+        correctness_evaluator: CorrectnessEvaluator,
+        misconception_detector: MisconceptionDetector,
     ) -> None:
         self._settings = settings
         self._llm = llm_client
@@ -76,10 +80,12 @@ class ChatOrchestrator:
         self._profile_retriever = profile_retriever
         self._misconception_store = misconception_store
         self._mastery_estimator = mastery_estimator
-        self._memory_updater = memory_updater
+        self._worker_queue = worker_queue
         self._session_manager = session_manager
         self._pedagogy_planner = pedagogy_planner
         self._prompt_builder = prompt_builder
+        self._correctness_evaluator = correctness_evaluator
+        self._misconception_detector = misconception_detector
 
     async def chat(
         self,
@@ -97,24 +103,19 @@ class ChatOrchestrator:
             db_session, request.learner_id
         )
 
-        # ── 2. Paralel retrieval ──────────────────────────────────────
-        content_task = asyncio.create_task(
-            self._content_retriever.retrieve(
-                db_session,
-                query=request.message,
-                top_k=self._settings.content_top_k,
-            )
+        # ── 2. Retrieval (sıralı — asyncpg aynı bağlantıda eş zamanlı sorguyu desteklemez)
+        query_embedding = await self._content_retriever.embed(request.message)
+        content_chunks = await self._content_retriever.retrieve(
+            db_session,
+            query=request.message,
+            kc_filter=ctx.active_kc_ids or None,
+            top_k=self._settings.content_top_k,
         )
-        memory_task = asyncio.create_task(
-            self._vector_store.search_learner_memory(
-                db_session,
-                learner_id=request.learner_id,
-                query_embedding=await self._content_retriever._embedder.embed(request.message),
-                top_k=self._settings.memory_top_k,
-            )
-        )
-        content_chunks, memory_interactions = await asyncio.gather(
-            content_task, memory_task
+        memory_interactions = await self._vector_store.search_learner_memory(
+            db_session,
+            learner_id=request.learner_id,
+            query_embedding=query_embedding,
+            top_k=self._settings.memory_top_k,
         )
 
         # ── 3. KC extraction + mastery ────────────────────────────────
@@ -122,6 +123,7 @@ class ChatOrchestrator:
             learner_id=request.learner_id,
             query=request.message,
             known_kc_ids=ctx.active_kc_ids,
+            db_session=db_session,
         )
 
         # ── 4. Misconceptions ─────────────────────────────────────────
@@ -163,15 +165,60 @@ class ChatOrchestrator:
             ctx.mastery_snapshot.upsert(kc)
         await self._session_manager.save(ctx)
 
-        # ── 9. Arka planda memory update ──────────────────────────────
-        interaction = Interaction(
-            learner_id=request.learner_id,
-            session_id=request.session_id,
-            interaction_type=InteractionType.QUESTION,
-            content_summary=request.message[:300],
-            kc_tags=kc_ids,
+        # ── 9. Doğruluk tespiti + misconception + KT mastery update ──
+        correct, detected_misconceptions = await asyncio.gather(
+            self._correctness_evaluator.evaluate(
+                user_message=request.message,
+                assistant_response=llm_response.content,
+                kc_ids=kc_ids,
+            ),
+            self._misconception_detector.detect(
+                user_message=request.message,
+                assistant_response=llm_response.content,
+                kc_ids=kc_ids,
+            ),
         )
-        self._memory_updater.fire_and_forget(interaction=interaction)
+
+        new_mastery: dict[str, float] | None = None
+        if kc_ids:
+            # correct=None (belirsiz/soru) → True gibi davran (etkileşim = öğrenme sinyali)
+            effective_correct = correct if correct is not None else True
+            new_mastery = await self._mastery_estimator.update_after_interaction(
+                learner_id=request.learner_id,
+                kc_ids=kc_ids,
+                correct=effective_correct,
+            )
+            logger.debug("mastery updated | correct=%s effective=%s new=%s", correct, effective_correct, new_mastery)
+
+        if detected_misconceptions:
+            logger.debug("misconceptions detected | %s", detected_misconceptions)
+
+        # kc_id'lerin ilk iki parçasından subject türet: "tyt_matematik_limit" → "tyt_matematik"
+        # Yoksa content chunk'ların document_id'si fallback olarak kullanılır
+        subject: str | None = None
+        if kc_ids:
+            from collections import Counter
+            prefixes = ["_".join(k.split("_")[:2]) for k in kc_ids if "_" in k]
+            if prefixes:
+                subject = Counter(prefixes).most_common(1)[0][0]
+        if subject is None and content_chunks:
+            from collections import Counter
+            subject = Counter(c.document_id for c in content_chunks).most_common(1)[0][0]
+
+        # ── 10. Worker queue'ya iş gönder ─────────────────────────────
+        await self._worker_queue.push({
+            "learner_id": str(request.learner_id),
+            "session_id": str(request.session_id),
+            "interaction_type": InteractionType.QUESTION.value,
+            "content_summary": request.message[:300],
+            "kc_tags": kc_ids,
+            "new_mastery": new_mastery,
+            "subject": subject,
+            "misconceptions": [
+                {"kc_id": kc_id, "description": desc}
+                for kc_id, desc in detected_misconceptions
+            ],
+        })
 
         logger.info(
             "chat done | model=%s in=%d out=%d",

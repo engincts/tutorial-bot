@@ -32,7 +32,7 @@ def build_engine(settings: Settings) -> AsyncEngine:
             "port": settings.postgres_port,
             "user": settings.postgres_user,
             "password": settings.postgres_password,
-            "ssl": "require",
+            "ssl": settings.postgres_ssl,
         },
     )
 
@@ -73,6 +73,12 @@ def get_engine() -> AsyncEngine:
     if _engine is None:
         raise RuntimeError("DB başlatılmadı — init_db() çağrılmamış.")
     return _engine
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    if _session_factory is None:
+        raise RuntimeError("DB başlatılmadı — init_db() çağrılmamış.")
+    return _session_factory
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

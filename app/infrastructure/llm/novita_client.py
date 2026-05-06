@@ -12,6 +12,7 @@ class NovitaClient(BaseLLMClient):
         self._client = AsyncOpenAI(
             api_key=settings.novita_api_key,
             base_url="https://api.novita.ai/v3/openai",
+            timeout=60.0,
         )
         self._model = settings.novita_llm_model
 

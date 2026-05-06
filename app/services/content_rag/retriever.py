@@ -4,12 +4,17 @@ curriculum chunk'larını getirir.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.embedder_factory import BaseEmbedder
 from app.infrastructure.pg_vector_store import ContentChunk, PgVectorStore
+
+if TYPE_CHECKING:
+    from app.services.content_rag.reranker import Reranker
 
 
 @dataclass
@@ -27,10 +32,15 @@ class ContentRetriever:
         embedder: BaseEmbedder,
         vector_store: PgVectorStore,
         top_k: int = 5,
+        reranker: Reranker | None = None,
     ) -> None:
         self._embedder = embedder
         self._store = vector_store
         self._top_k = top_k
+        self._reranker = reranker
+
+    async def embed(self, text: str) -> list[float]:
+        return await self._embedder.embed(text)
 
     async def retrieve(
         self,
@@ -53,7 +63,12 @@ class ContentRetriever:
             kc_filter=kc_filter,
         )
 
-        return [self._to_retrieved(c) for c in raw_chunks]
+        chunks = [self._to_retrieved(c) for c in raw_chunks]
+
+        if self._reranker and chunks:
+            chunks = await self._reranker.rerank(query=query, chunks=chunks, top_k=k)
+
+        return chunks
 
     def to_prompt_context(self, chunks: list[RetrievedChunk]) -> str:
         """Prompt'a eklenecek kaynak içeriği formatlar."""
@@ -68,7 +83,6 @@ class ContentRetriever:
 
     @staticmethod
     def _to_retrieved(chunk: ContentChunk) -> RetrievedChunk:
-        import json
         try:
             meta = json.loads(chunk.metadata_ or "{}")
         except Exception:

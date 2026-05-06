@@ -14,7 +14,15 @@ class BaseKnowledgeTracer(ABC):
 
     estimate() → sonraki etkileşimden ÖNCE çağrılır (mevcut durum)
     update()   → etkileşim gerçekleştikten SONRA çağrılır (yeni gözlem)
+    seed_state() → DB'den yüklenen değerlerle in-memory state'i senkronize eder
     """
+
+    def seed_state(self, learner_id: uuid.UUID, mastery_dict: dict[str, float]) -> None:
+        """
+        DB'den yüklenen mastery değerlerini in-memory state'e uygular.
+        Restart sonrası öğrenci state'ini geri yükler.
+        Sadece hiç görülmemiş KC'ler için override eder.
+        """
 
     @abstractmethod
     async def estimate(
