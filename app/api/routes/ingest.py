@@ -78,7 +78,7 @@ async def ingest_pdf(
     if len(pdf_bytes) > _MAX_PDF_BYTES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"PDF çok büyük — maks 20 MB, gelen: {len(pdf_bytes) / 1_048_576:.1f} MB",
+            detail=f"PDF çok büyük — maks {_MAX_PDF_BYTES // 1_048_576} MB, gelen: {len(pdf_bytes) / 1_048_576:.1f} MB",
         )
 
     tags = [t.strip() for t in kc_tags.split(",") if t.strip()]

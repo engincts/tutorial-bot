@@ -51,11 +51,11 @@ async def list_conversations(
 @router.get("/{session_id}/messages", response_model=list[MessageOut])
 async def get_messages(
     session_id: uuid.UUID,
-    _: uuid.UUID = Depends(get_current_learner_id),
+    learner_id: uuid.UUID = Depends(get_current_learner_id),
     store: ChatStore = Depends(get_chat_store),
     db: AsyncSession = Depends(get_session),
 ) -> list[MessageOut]:
-    messages = await store.get_messages(db, session_id)
+    messages = await store.get_messages(db, session_id, learner_id=learner_id)
     return [
         MessageOut(
             id=m.id,
