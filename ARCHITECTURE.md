@@ -22,6 +22,9 @@
 | Embedding | BGE-M3 / OpenAI / Novita (yapılandırılabilir) |
 | Knowledge Tracing | AKT / DKT (saf Python, PyTorch gerektirmez) |
 | ORM | SQLAlchemy 2.0 async |
+| Monitoring | Prometheus Metrics + JSON Structured Logging |
+| Proxy | Nginx (SSE & SSL support) |
+| CI/CD | GitHub Actions + Docker Multi-stage |
 
 ---
 
@@ -33,10 +36,17 @@ tutor-bot/
 │   ├── api/
 │   │   ├── routes/
 │   │   │   ├── auth.py                    # POST /auth/register, /auth/login
-│   │   │   ├── chat.py                    # POST /chat  (ana akış)
+│   │   │   ├── chat.py                    # POST /chat, /chat/stream (SSE)
+│   │   │   ├── quiz.py                    # POST /quiz/* (adaptive, batch)
 │   │   │   ├── ingest.py                  # POST /ingest/text, /ingest/pdf
-│   │   │   ├── profile.py                 # GET /profile/{learner_id}
+│   │   │   ├── profile.py                 # GET /profile/{id}
+│   │   │   ├── admin.py                   # GET /admin/* (monitoring, logs)
+│   │   │   ├── export.py                  # GET /export/* (csv, json)
+│   │   │   ├── upload.py                  # POST /upload (student docs)
 │   │   │   └── session.py                 # POST /session/reset
+│   │   ├── middleware/
+│   │   │   ├── metrics.py                 # Prometheus HTTP & Business metrics
+│   │   │   └── tracing.py                 # X-Request-ID propagation
 │   │   ├── dependencies.py                # FastAPI Depends() singleton fabrikaları
 │   │   └── dependencies_auth.py           # Bearer token → learner_id
 │   │
@@ -48,10 +58,11 @@ tutor-bot/
 │   │
 │   ├── services/
 │   │   ├── orchestration/
-│   │   │   ├── chat_orchestrator.py       # /chat isteğini koordine eder
+│   │   │   ├── chat_orchestrator.py       # /chat isteğini koordine eder (Sync & SSE)
 │   │   │   ├── session_manager.py         # Redis oturum CRUD
 │   │   │   ├── pedagogy_planner.py        # Strateji seçimi (mastery eşikleri)
 │   │   │   ├── prompt_builder.py          # System + context prompt birleştirme
+│   │   │   ├── conversation_summarizer.py # Context window koruma (özetleme)
 │   │   │   ├── correctness_evaluator.py   # LLM ile doğruluk değerlendirmesi → KT sinyali
 │   │   │   └── misconception_detector.py  # LLM ile kavram yanılgısı tespiti
 │   │   │
@@ -78,6 +89,7 @@ tutor-bot/
 │   │   ├── database.py                    # SQLAlchemy async engine/session fabrikaları
 │   │   ├── auth.py                        # JWT decode (base64 → UUID)
 │   │   ├── redis_client.py                # SessionCache + WorkerQueue
+│   │   ├── event_bus.py                   # Redis Pub/Sub (events:mastery_change vb.)
 │   │   ├── pg_vector_store.py             # ORM: ContentChunk, InteractionEmbedding
 │   │   ├── embedder_factory.py            # BGEM3Embedder, OpenAIEmbedder, NovitaEmbedder
 │   │   └── llm/
@@ -92,6 +104,8 @@ tutor-bot/
 │   ├── main.py                            # FastAPI uygulama fabrikası, lifespan
 │   ├── settings.py                        # Pydantic Settings (env vars + config.json)
 │   ├── config_loader.py                   # Özel JSON config kaynağı
+│   ├── logging_json.py                    # Production için JSON Formatter
+│   ├── i18n.py                            # Çok dilli prompt desteği (TR/EN)
 │   └── logging_config.py                  # Log seviyesi yapılandırması
 │
 ├── migrations/                            # Alembic şema versiyonlama
