@@ -30,6 +30,15 @@ def get_redis() -> aioredis.Redis:
         raise RuntimeError("Redis başlatılmadı — init_redis() çağrılmamış.")
     return _redis
 
+async def check_redis() -> bool:
+    """Redis bağlantısını kontrol eder, yoksa sessizce hata döner."""
+    try:
+        await get_redis().ping()
+        return True
+    except Exception:
+        return False
+
+
 
 class SessionCache:
     """
@@ -74,7 +83,12 @@ class WorkerQueue:
     """
 
     async def push(self, job: dict) -> None:
-        await get_redis().lpush(_WORKER_QUEUE_KEY, json.dumps(job, default=str))
+        try:
+            await get_redis().lpush(_WORKER_QUEUE_KEY, json.dumps(job, default=str))
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Redis queue push failed: %s", e)
+
 
     async def pop(self, timeout: int = 5) -> dict | None:
         result = await get_redis().brpop(_WORKER_QUEUE_KEY, timeout=timeout)

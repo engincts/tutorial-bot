@@ -1,10 +1,12 @@
 .sidebar {
-  width: 240px;
+  width: 248px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border);
-  background: var(--surface);
+  border-right: 1px solid var(--border-light);
+  background: var(--bg-sidebar);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   overflow: hidden;
 }
 
@@ -12,17 +14,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
 
 .heading {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
 }
 
 .newBtn {
@@ -34,17 +36,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+  box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
 }
 
 .newBtn:hover {
   background: var(--primary-hover);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+  transform: scale(1.08);
 }
 
 .list {
   flex: 1;
   overflow-y: auto;
-  padding: 6px;
+  padding: 8px 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -52,9 +57,10 @@
 
 .empty {
   font-size: 13px;
-  color: var(--text-3);
+  color: var(--text-dim);
   text-align: center;
-  padding: 24px 12px;
+  padding: 28px 12px;
+  line-height: 1.6;
 }
 
 .item {
@@ -64,12 +70,14 @@
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.15s;
   min-width: 0;
+  border: 1px solid transparent;
 }
 
 .item:hover {
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-light);
 }
 
 .item:hover .deleteBtn {
@@ -77,17 +85,21 @@
 }
 
 .active {
-  background: var(--primary) !important;
+  background: var(--primary-light) !important;
+  border-color: rgba(99, 102, 241, 0.25) !important;
 }
 
-.active .title,
+.active .title {
+  color: #C7D2FE !important;
+}
+
 .active .time {
-  color: #fff !important;
+  color: rgba(167, 179, 255, 0.6) !important;
 }
 
 .active .deleteBtn {
   opacity: 1;
-  color: rgba(255,255,255,0.8);
+  color: rgba(199, 210, 254, 0.7);
 }
 
 .itemBody {
@@ -101,7 +113,7 @@
 .title {
   font-size: 13px;
   font-weight: 500;
-  color: var(--text);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -109,13 +121,13 @@
 
 .time {
   font-size: 11px;
-  color: var(--text-3);
+  color: var(--text-dim);
 }
 
 .deleteBtn {
   opacity: 0;
   background: transparent;
-  color: var(--text-3);
+  color: var(--text-dim);
   padding: 3px;
   border-radius: 4px;
   display: flex;

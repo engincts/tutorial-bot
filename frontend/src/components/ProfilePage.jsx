@@ -3,10 +3,11 @@ import { getProfile } from "../api";
 import styles from "./ProfilePage.module.css";
 
 const LEVELS = [
-  { max: 0.4, label: "Temel", color: "#ef4444" },
-  { max: 0.7, label: "Gelişiyor", color: "#f59e0b" },
-  { max: 1.01, label: "Uzman", color: "#22c55e" },
+  { max: 0.4,  label: "Başlangıç", color: "#F43F5E" },
+  { max: 0.7,  label: "Gelişiyor", color: "#F59E0B" },
+  { max: 1.01, label: "Uzman",     color: "#10B981" },
 ];
+
 
 function getLevel(score) {
   return LEVELS.find((l) => score < l.max) || LEVELS[LEVELS.length - 1];

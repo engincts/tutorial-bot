@@ -5,10 +5,13 @@ services:
     volumes:
       - ./frontend:/app
     command: sh -c "npm install && npm run dev -- --host"
+    environment:
+      - API_TARGET=http://api:8005
     ports:
       - "3000:3000"
     depends_on:
       - api
+
     restart: unless-stopped
 
   api:
