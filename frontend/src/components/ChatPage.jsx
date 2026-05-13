@@ -12,15 +12,63 @@ const WELCOME = {
   content: "Merhaba! Ben senin kişisel AI öğretmeniniyim. Hangi konuda çalışmak istiyorsun?",
 };
 
-// mastery state yapısı: { kc_id: { score, subject, label } }
+/**
+ * DB'deki mastery_by_subject yapısından düz bir mastery map oluşturur.
+ * { kc_id: { score, subject, label } }
+ */
 function profileToMasteryMap(profile) {
   const map = {};
-  for (const [subject, kcs] of Object.entries(profile.mastery_by_subject || {})) {
+  const subjects = profile.mastery_by_subject || {};
+  for (const [subject, kcs] of Object.entries(subjects)) {
     for (const kc of kcs) {
-      map[kc.kc_id] = { score: kc.p_mastery, subject, label: kc.label };
+      map[kc.kc_id] = {
+        score: kc.p_mastery,
+        subject,
+        label: kc.label || formatLabel(kc.kc_id, subject),
+      };
     }
   }
   return map;
+}
+
+/**
+ * Chat response'daki mastery_snapshot (kc_id → float) ve mastery_subjects (kc_id → domain)
+ * kullanılarak mevcut mastery map'i günceller.
+ */
+function mergeSnapshotIntoMastery(prev, masterySnapshot, masterySubjects) {
+  const next = { ...prev };
+  for (const [kc_id, score] of Object.entries(masterySnapshot)) {
+    const rawDomain = masterySubjects[kc_id] || "";
+    const subject = rawDomain
+      ? rawDomain.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+      : kc_id.split("_").slice(0, 2).join(" ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+    // Eğer zaten varsa label'ı koru, yoksa üret
+    const existingLabel = prev[kc_id]?.label;
+    const label = existingLabel || formatLabel(kc_id, rawDomain);
+
+    next[kc_id] = {
+      score,
+      subject: prev[kc_id]?.subject || subject,
+      label,
+    };
+  }
+  return next;
+}
+
+/**
+ * kc_id ve domain'den okunabilir label üretir.
+ * "tyt_matematik_turev" + "tyt_matematik" → "Türev"
+ */
+function formatLabel(kc_id, domain) {
+  let slug = kc_id;
+  if (domain && kc_id.startsWith(domain + "_")) {
+    slug = kc_id.slice(domain.length + 1);
+  } else {
+    const parts = kc_id.split("_");
+    slug = parts.length > 2 ? parts.slice(2).join("_") : kc_id;
+  }
+  return slug.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export default function ChatPage({ auth }) {
@@ -40,10 +88,12 @@ export default function ChatPage({ auth }) {
 
   // İlk yüklemede profil + sohbet listesini getir
   useEffect(() => {
-    listConversations(token).then(setSessions);
-    getProfile(token, learnerId).then((profile) => {
-      if (profile) setMastery(profileToMasteryMap(profile));
-    });
+    listConversations(token).then(setSessions).catch(() => {});
+    getProfile(token, learnerId)
+      .then((profile) => {
+        if (profile) setMastery(profileToMasteryMap(profile));
+      })
+      .catch(() => {});
   }, [token, learnerId]);
 
   useEffect(() => {
@@ -106,37 +156,25 @@ export default function ChatPage({ auth }) {
         },
       ]);
 
-      if (data.mastery_snapshot) {
-        setMastery((prev) => {
-          const next = { ...prev };
-          const subjects = data.mastery_subjects || {};
-          
-          for (const [kc_id, score] of Object.entries(data.mastery_snapshot)) {
-            const rawSubject = subjects[kc_id] || kc_id.split("_")[0];
-            const subject = rawSubject.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-            
-            // Eğer kc_id subject ile başlıyorsa label'dan subject'i çıkar
-            let labelSlug = kc_id;
-            if (kc_id.startsWith(rawSubject + "_")) {
-              labelSlug = kc_id.slice(rawSubject.length + 1);
-            }
-            const label = labelSlug.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-
-            next[kc_id] = {
-              score,
-              subject: prev[kc_id]?.subject || subject,
-              label: prev[kc_id]?.label || label,
-            };
-          }
-          return next;
-        });
+      // Bilgi seviyesi güncellemesi
+      if (data.mastery_snapshot && Object.keys(data.mastery_snapshot).length > 0) {
+        setMastery((prev) =>
+          mergeSnapshotIntoMastery(prev, data.mastery_snapshot, data.mastery_subjects || {})
+        );
+        // Panel kapalıysa otomatik aç (opsiyonel)
+        // setMasteryOpen(true);
       }
 
       // Oturum listesini güncelle — başa taşı veya ekle
       setSessions((prev) => {
         const existing = prev.find((s) => s.id === currentSessionId);
         const title = text.slice(0, 60);
-        const updated = { id: currentSessionId, title, updated_at: new Date().toISOString(), created_at: existing?.created_at || new Date().toISOString() };
+        const updated = {
+          id: currentSessionId,
+          title,
+          updated_at: new Date().toISOString(),
+          created_at: existing?.created_at || new Date().toISOString(),
+        };
         return [updated, ...prev.filter((s) => s.id !== currentSessionId)];
       });
     } catch (err) {
@@ -155,6 +193,8 @@ export default function ChatPage({ auth }) {
       handleSend();
     }
   }
+
+  const masteryCount = Object.keys(mastery).length;
 
   return (
     <div className={styles.layout}>
@@ -183,8 +223,8 @@ export default function ChatPage({ auth }) {
             {sessions.find((s) => s.id === currentSessionId)?.title || "Yeni Sohbet"}
           </span>
           <button
-            className={styles.iconBtn}
-            title="Bilgi seviyesi"
+            className={`${styles.iconBtn} ${masteryOpen ? styles.active : ""}`}
+            title={`Bilgi seviyem${masteryCount > 0 ? ` (${masteryCount} konu)` : ""}`}
             onClick={() => setMasteryOpen((o) => !o)}
           >
             <ChartIcon />
@@ -244,7 +284,11 @@ export default function ChatPage({ auth }) {
       {/* ── Sağ: Mastery panel ── */}
       {masteryOpen && (
         <aside className={styles.masteryAside}>
-          <MasteryPanel mastery={mastery} />
+          <MasteryPanel mastery={mastery} onRefresh={() => {
+            getProfile(token, learnerId).then((profile) => {
+              if (profile) setMastery(profileToMasteryMap(profile));
+            }).catch(() => {});
+          }} />
         </aside>
       )}
     </div>

@@ -88,8 +88,11 @@ class MemoryUpdater:
 
                 # 4. KT mastery güncellemeleri
                 for kc_id, p_mastery in eval_mastery.items():
-                    # KC ID'nin ilk parçası = ders; fallback olarak genel subject kullan
-                    per_kc_subject = kc_id.split("_")[0] or subject
+                    # Eğer subject_map verilmemişse orchestrator'dan gelen subject'i kullan
+                    per_kc_subject = subject
+                    if not per_kc_subject:
+                        per_kc_subject = kc_id.split("_")[0]
+                        
                     await self._profile_retriever.upsert_kc_mastery(
                         session,
                         learner_id=interaction.learner_id,

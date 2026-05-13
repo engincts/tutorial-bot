@@ -121,7 +121,7 @@ class PgVectorStore:
         sql = f"""
         WITH dense_search AS (
             SELECT id, 
-                   row_number() OVER (ORDER BY embedding <=> :embedding::vector) as rank
+                   row_number() OVER (ORDER BY embedding <=> CAST(:embedding AS vector)) as rank
             FROM curriculum_chunks
             {filter_clause}
             LIMIT 50
@@ -148,19 +148,10 @@ class PgVectorStore:
         ORDER BY r.rrf_score DESC;
         """
         
-        result = await session.execute(
-            text(sql),
-            {"embedding": query_embedding, "query": query, "top_k": top_k}
-        )
-        
-        # We need to map raw rows back to ContentChunk models
-        # But text() returns Row objects, not ORM models directly
-        # Let's use session.scalars with FromStatement
-        
         stmt = select(ContentChunk).from_statement(text(sql))
         result_orm = await session.scalars(
             stmt,
-            {"embedding": query_embedding, "query": query, "top_k": top_k}
+            {"embedding": str(query_embedding), "query": query, "top_k": top_k}
         )
         return list(result_orm.all())
 

@@ -113,10 +113,17 @@ def create_app() -> FastAPI:
         checks: dict = {}
 
         try:
-            await get_redis().ping()
-            checks["redis"] = "ok"
+            from app.infrastructure.redis_client import check_redis
+            # 2 saniye timeout ile ping deniyoruz
+            import asyncio
+            try:
+                is_ok = await asyncio.wait_for(check_redis(), timeout=2.0)
+                checks["redis"] = "ok" if is_ok else "error"
+            except asyncio.TimeoutError:
+                checks["redis"] = "timeout"
         except Exception:
             checks["redis"] = "error"
+
 
         try:
             async with get_engine().connect() as conn:

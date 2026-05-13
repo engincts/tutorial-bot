@@ -119,16 +119,28 @@ class ProfileRetriever:
 
         snapshot = KCMasterySnapshot()
         for row in rows:
+            kc_id = row.kc_id
+            domain = row.subject or "genel"
+            # Build human-readable label: strip leading domain prefix if present
+            # e.g. "tyt_matematik_turev" with subject "tyt_matematik" → "Turev"
+            if kc_id.startswith(domain + "_"):
+                label_slug = kc_id[len(domain) + 1:]
+            else:
+                # Fallback: drop first two segments for "prefix_domain_topic" patterns
+                parts = kc_id.split("_")
+                label_slug = "_".join(parts[2:]) if len(parts) > 2 else kc_id
+            label = label_slug.replace("_", " ").title() if label_slug else kc_id.replace("_", " ").title()
             snapshot.upsert(
                 KnowledgeComponent(
-                    kc_id=row.kc_id,
-                    label=row.kc_id.replace("_", " ").title(),
+                    kc_id=kc_id,
+                    label=label,
                     p_mastery=row.p_mastery,
                     attempts=row.attempts,
-                    domain=row.subject or "genel",
+                    domain=domain,
                 )
             )
         return snapshot
+
 
     async def upsert_kc_mastery(
         self,

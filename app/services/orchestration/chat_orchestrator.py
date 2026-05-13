@@ -187,15 +187,34 @@ class ChatOrchestrator:
         if detected_misconceptions:
             logger.debug("misconceptions detected | %s", detected_misconceptions)
 
-        # KC ID'nin ilk parçası = ders (matematik, fizik…) — worker bunu DB'ye yazar
         subject: str | None = None
-        if kc_ids:
+        if kc_ids and course_names:
             from collections import Counter
-            first_parts = [k.split("_")[0] for k in kc_ids]
-            subject = Counter(first_parts).most_common(1)[0][0]
+            matched_subjects = []
+            sorted_courses = sorted(course_names, key=len, reverse=True)
+            for k in kc_ids:
+                found = False
+                for cname in sorted_courses:
+                    if k.startswith(cname + "_") or k == cname:
+                        matched_subjects.append(cname)
+                        found = True
+                        break
+                if not found:
+                    matched_subjects.append(k.split("_")[0])
+            if matched_subjects:
+                subject = Counter(matched_subjects).most_common(1)[0][0]
+                
         if subject is None and content_chunks:
             from collections import Counter
             subject = Counter(c.document_id for c in content_chunks).most_common(1)[0][0]
+
+        new_mastery = None
+        if correct is not None and kc_ids:
+            new_mastery = await self._mastery_estimator.update_after_interaction(
+                learner_id=request.learner_id,
+                kc_ids=kc_ids,
+                correct=correct,
+            )
 
         # ── 10. Worker queue'ya iş gönder ─────────────────────────────
         await self._worker_queue.push({
@@ -209,6 +228,7 @@ class ChatOrchestrator:
                 {"kc_id": kc_id, "description": desc}
                 for kc_id, desc in detected_misconceptions
             ],
+            "new_mastery": new_mastery,
             "user_message": request.message,
             "assistant_response": llm_response.content,
             "context_used": "\n".join([c.content[:200] for c in content_chunks])  # Sadece kısa özet
@@ -321,13 +341,33 @@ class ChatOrchestrator:
         )
 
         subject: str | None = None
-        if kc_ids:
+        if kc_ids and course_names:
             from collections import Counter
-            first_parts = [k.split("_")[0] for k in kc_ids]
-            subject = Counter(first_parts).most_common(1)[0][0]
+            matched_subjects = []
+            sorted_courses = sorted(course_names, key=len, reverse=True)
+            for k in kc_ids:
+                found = False
+                for cname in sorted_courses:
+                    if k.startswith(cname + "_") or k == cname:
+                        matched_subjects.append(cname)
+                        found = True
+                        break
+                if not found:
+                    matched_subjects.append(k.split("_")[0])
+            if matched_subjects:
+                subject = Counter(matched_subjects).most_common(1)[0][0]
+                
         if subject is None and content_chunks:
             from collections import Counter
             subject = Counter(c.document_id for c in content_chunks).most_common(1)[0][0]
+
+        new_mastery = None
+        if correct is not None and kc_ids:
+            new_mastery = await self._mastery_estimator.update_after_interaction(
+                learner_id=request.learner_id,
+                kc_ids=kc_ids,
+                correct=correct,
+            )
 
         await self._worker_queue.push({
             "learner_id": str(request.learner_id),
@@ -337,6 +377,7 @@ class ChatOrchestrator:
             "kc_tags": kc_ids,
             "subject": subject,
             "misconceptions": [{"kc_id": kc_id, "description": desc} for kc_id, desc in detected_misconceptions],
+            "new_mastery": new_mastery,
             "user_message": request.message,
             "assistant_response": full_content,
             "context_used": "\n".join([c.content[:200] for c in content_chunks]),
