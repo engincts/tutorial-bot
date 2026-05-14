@@ -115,7 +115,7 @@ class PgVectorStore:
         filter_clause = ""
         if kc_filter:
             # Postgres ARRAY overlap operator
-            formatted_filter = "ARRAY[" + ",".join([f"'{k}'" for k in kc_filter]) + "]::varchar[]"
+            formatted_filter = "ARRAY[" + ",".join([f"'{k}'" for k in kc_filter]) + "]::text[]"
             filter_clause = f"WHERE kc_tags && {formatted_filter}"
 
         sql = f"""

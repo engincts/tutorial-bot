@@ -165,17 +165,24 @@ export default function ChatPage({ auth }) {
         // setMasteryOpen(true);
       }
 
-      // Oturum listesini güncelle — başa taşı veya ekle
+      // Oturum listesini güncelle
       setSessions((prev) => {
         const existing = prev.find((s) => s.id === currentSessionId);
-        const title = text.slice(0, 60);
+        // Sadece ilk mesajda veya başlık "Yeni Sohbet" ise güncelle
+        const title = existing && existing.title && existing.title !== "Yeni Sohbet" 
+          ? existing.title 
+          : text.slice(0, 60);
+          
         const updated = {
           id: currentSessionId,
           title,
           updated_at: new Date().toISOString(),
           created_at: existing?.created_at || new Date().toISOString(),
         };
-        return [updated, ...prev.filter((s) => s.id !== currentSessionId)];
+        if (existing) {
+          return prev.map((s) => (s.id === currentSessionId ? updated : s));
+        }
+        return [updated, ...prev];
       });
     } catch (err) {
       setError(err.message);

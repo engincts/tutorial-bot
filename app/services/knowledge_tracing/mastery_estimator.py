@@ -30,6 +30,7 @@ class MasteryEstimator:
         learner_id: uuid.UUID,
         query: str,
         known_kc_ids: list[str] | None = None,
+        known_snapshot: KCMasterySnapshot | None = None,
         db_session: AsyncSession | None = None,
         course_names: list[str] | None = None,
     ) -> tuple[list[str], KCMasterySnapshot]:
@@ -57,11 +58,22 @@ class MasteryEstimator:
                     {kc_id: kc.p_mastery for kc_id, kc in db_snapshot.components.items()},
                 )
 
+        # Eğer DB güncellenmediyse in-memory cache'ten seed et
+        if known_snapshot and known_snapshot.components:
+            missing_in_db = {
+                kc_id: kc.p_mastery for kc_id, kc in known_snapshot.components.items()
+                if kc_id not in db_snapshot.components
+            }
+            if missing_in_db:
+                self._tracer.seed_state(learner_id, missing_in_db)
+
         mastery_map = await self._tracer.estimate(learner_id=learner_id, kc_ids=kc_ids)
 
         snapshot = KCMasterySnapshot()
         for kc_id, p_mastery in mastery_map.items():
             db_kc = db_snapshot.components.get(kc_id)
+            if db_kc is None and known_snapshot:
+                db_kc = known_snapshot.components.get(kc_id)
             
             # Ana ders adlarına (course_names) göre subject tespiti
             subject = "Genel"
@@ -81,10 +93,16 @@ class MasteryEstimator:
                         break
             
             if subject == "Genel":
-                parts = kc_id.split("_")
-                subject = parts[0]
-                label_parts = parts[1:] if len(parts) > 1 else parts
-                label = " ".join(label_parts).replace("_", " ").title()
+                if course_names:
+                    # Sistemde dersler yüklüyken eşleşme olmadıysa rastgele ders üretme
+                    subject = "Genel"
+                    label = kc_id.replace("_", " ").title()
+                else:
+                    # Sistemde hiç ders yoksa LLM'in ilk kelimesini ders olarak kabul et
+                    parts = kc_id.split("_")
+                    subject = parts[0]
+                    label_parts = parts[1:] if len(parts) > 1 else parts
+                    label = " ".join(label_parts).replace("_", " ").title()
             else:
                 label = label_slug.replace("_", " ").title()
 

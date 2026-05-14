@@ -127,6 +127,7 @@ class ChatOrchestrator:
             learner_id=request.learner_id,
             query=request.message,
             known_kc_ids=ctx.active_kc_ids,
+            known_snapshot=ctx.mastery_snapshot,
             db_session=db_session,
             course_names=course_names,
         )
@@ -153,7 +154,7 @@ class ChatOrchestrator:
             conversation_history=ctx.to_conversation_history(n=6),
         )
 
-        logger.debug("pedagogy=%s kc_ids=%s", pedagogy_directive, kc_ids)
+        logger.info("pedagogy strategy selected | kc_ids=%s mastery_components=%d", kc_ids, len(mastery_snapshot.components))
 
         # ── 7. LLM çağrısı ────────────────────────────────────────────
         llm_response: LLMResponse = await self._llm.complete(
@@ -200,7 +201,8 @@ class ChatOrchestrator:
                         found = True
                         break
                 if not found:
-                    matched_subjects.append(k.split("_")[0])
+                    # Sistemde ders yüklüyken eşleşme yoksa rastgele isim üretme, Genel de
+                    matched_subjects.append("Genel")
             if matched_subjects:
                 subject = Counter(matched_subjects).most_common(1)[0][0]
                 
@@ -243,6 +245,14 @@ class ChatOrchestrator:
             **{k: v.p_mastery for k, v in mastery_snapshot.components.items()}
         }
         mastery_subjects = {k: v.domain for k, v in mastery_snapshot.components.items()}
+        
+        if new_mastery:
+            merged_mastery.update(new_mastery)
+            if subject:
+                for k in new_mastery:
+                    if k not in mastery_subjects:
+                        mastery_subjects[k] = subject
+                        
         retrieved_sources = [
             {"document_id": c.document_id, "chunk_index": c.chunk_index, "content_preview": c.content[:100]}
             for c in content_chunks
@@ -353,7 +363,7 @@ class ChatOrchestrator:
                         found = True
                         break
                 if not found:
-                    matched_subjects.append(k.split("_")[0])
+                    matched_subjects.append("Genel")
             if matched_subjects:
                 subject = Counter(matched_subjects).most_common(1)[0][0]
                 

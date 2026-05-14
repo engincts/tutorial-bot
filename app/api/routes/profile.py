@@ -60,9 +60,11 @@ async def get_profile(
     return ProfileOut(
         learner_id=profile.id,
         display_name=profile.display_name,
+        preferred_language=profile.preferred_language,
         preferences=profile.preferences,
         mastery_by_subject=dict(grouped),
     )
+
 
 class ProfilePatch(BaseModel):
     display_name: str | None = None

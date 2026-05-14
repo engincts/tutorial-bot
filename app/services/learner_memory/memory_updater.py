@@ -118,9 +118,9 @@ class MemoryUpdater:
                         await self._logger.log(session, ref_interaction)
                         
                         # update profile preferences
-                        profile = await self._profile_retriever.get_profile(session, interaction.learner_id)
+                        profile = await self._profile_retriever.get_or_create(session, interaction.learner_id)
                         if profile:
-                            prefs = json.loads(profile.preferences) if profile.preferences else {}
+                            prefs = profile.preferences or {}
                             prefs["last_reflection"] = reflection
                             from sqlalchemy import update, text
                             from sqlalchemy.dialects.postgresql import UUID

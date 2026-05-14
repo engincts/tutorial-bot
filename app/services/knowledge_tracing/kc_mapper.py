@@ -18,20 +18,22 @@ logger = logging.getLogger(__name__)
 
 _EXTRACTION_SYSTEM = """\
 Sen bir eğitim içeriği analistinin yardımcısı olarak çalışıyorsun.
-Verilen metinde geçen akademik kavramları (knowledge component'ları) tespit et.
-SADECE JSON array döndür, başka hiçbir şey yazma.
+Kullanıcının sorusunda geçen akademik konuları veya kavramları tespit edip standart formata çevirmelisin.
+SADECE geçerli bir JSON array döndür, markdown veya başka açıklama ekleme.
 
-KC ID formatı: {ders}_{konu}_{kavram} — üç katmanlı, küçük harf Türkçe, kelimeler arası alt çizgi.
-- ders: Sistemde bulunan ana ders adlarından birini kullanmalısın. Eğer sistemde mevcut değilse en uygununu seç.
-Mevcut Ana Ders Adları: {course_names}
-- konu: turev, integral, kuvvet, asit_baz, hucre, denklem, paragraf vb.
-- kavram: zincir_kural, newton_2_kanun, ph_hesabi, mitoz, ikinci_derece vb.
+KC ID formatı: {ders}_{konu}_{kavram} — üç katmanlı, küçük harf İngilizce karakterler, kelimeler arası alt çizgi.
+- ders: matematik, fizik, kimya, biyoloji, turkce, tarih vb.
+- konu: turev, integral, kuvvet, asit_baz, hucre, denklem vb.
+- kavram: temel, tanim, zincir_kurali, formuller, problem vb.
+
+Eğer sistemde şu dersler varsa, öncelikle onları kullan: {course_names}
 
 Örnekler:
-- Türev sorusu     → ["matematik_turev_temel_kural", "matematik_turev_zincir_kural"]
-- Newton yasaları  → ["fizik_kuvvet_newton_2_kanun", "fizik_kuvvet_momentum"]
+- "Türev nedir?"     -> ["matematik_turev_tanim"]
+- "Eğim nasıl bulunur?" -> ["matematik_turev_egim", "matematik_analitik_geometri"]
+- "Newton'un 2. yasası"  -> ["fizik_kuvvet_newton_2_kanun"]
 
-Eğer belirgin bir kavram yoksa boş array döndür: []
+Soru çok kısa olsa bile, hangi konuyla ilgiliyse ona uygun en az bir etiket üret. Gerçekten hiçbir akademik kavram yoksa (örn: "merhaba", "nasılsın") boş array döndür: []
 """
 
 
@@ -62,6 +64,7 @@ class KCMapper:
                 max_tokens=100,
             )
             raw = response.content.strip()
+            logger.info("KC Mapper Raw Output: %r", raw)
             # JSON array çıkar
             match = re.search(r"\[.*?\]", raw, re.DOTALL)
             if not match:
@@ -74,5 +77,5 @@ class KCMapper:
                 if isinstance(kc, str) and kc.strip()
             ][: self._max_kc]
         except Exception as exc:
-            logger.debug("KC extraction başarısız: %s", exc)
+            logger.error("KC extraction başarısız: %s", exc)
             return []
