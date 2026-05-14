@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import LoginPage from "./components/LoginPage";
 import ChatPage from "./components/ChatPage";
 import ProfilePage from "./components/ProfilePage";
+import QuizPage from "./components/QuizPage";
+import AdminPage from "./components/AdminPage";
 import styles from "./App.module.css";
 import { supabase } from "./supabase";
 
@@ -102,6 +104,18 @@ export default function App() {
           >
             Profilim
           </button>
+          <button
+            className={`${styles.tab} ${tab === "quiz" ? styles.tabActive : ""}`}
+            onClick={() => setTab("quiz")}
+          >
+            Quiz
+          </button>
+          <button
+            className={`${styles.tab} ${tab === "admin" ? styles.tabActive : ""}`}
+            onClick={() => setTab("admin")}
+          >
+            Yönetim
+          </button>
         </nav>
         <button className={styles.logoutBtn} onClick={handleLogout}>
           Çıkış
@@ -115,6 +129,12 @@ export default function App() {
         </div>
         <div className={tab === "profile" ? styles.tabPane : styles.tabPaneHidden}>
           {tab === "profile" && <ProfilePage auth={auth} />}
+        </div>
+        <div className={tab === "quiz" ? styles.tabPane : styles.tabPaneHidden}>
+          {tab === "quiz" && <QuizPage auth={auth} />}
+        </div>
+        <div className={tab === "admin" ? styles.tabPane : styles.tabPaneHidden}>
+          {tab === "admin" && <AdminPage auth={auth} />}
         </div>
       </div>
     </div>

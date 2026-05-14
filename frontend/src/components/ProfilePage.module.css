@@ -59,3 +59,37 @@
 .dot { width: 8px; height: 8px; border-radius: 50%; }
 
 @media (max-width: 768px) { .page { padding: 16px; } }
+
+.exportSection {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.exportBtn {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: .15s;
+}
+
+.exportBtn:hover {
+  background: var(--bg-surface-3);
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+
+.radarSection {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+  display: flex;
+  justify-content: center;
+}

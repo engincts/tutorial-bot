@@ -18,17 +18,37 @@ SAMPLE_DATA = [
     {
         "id": "tyt_matematik",
         "kc": "matematik_sayilar_dogal_sayilar",
-        "text": "# Doğal Sayılar\nDoğal sayılar 0'dan başlayıp sonsuza giden tam sayılardır. N = {0, 1, 2, ...} şeklinde gösterilir."
+        "text": "# Doğal Sayılar\nDoğal sayılar 0'dan başlayıp sonsuza giden tam sayılardır. N = {0, 1, 2, ...} şeklinde gösterilir. En küçük doğal sayı 0'dır."
     },
     {
         "id": "tyt_matematik",
         "kc": "matematik_sayilar_tam_sayilar",
-        "text": "# Tam Sayılar\nTam sayılar kümesi, doğal sayılar ile bunların negatiflerinin birleşimidir. Z = {..., -2, -1, 0, 1, 2, ...} şeklinde gösterilir."
+        "text": "# Tam Sayılar\nTam sayılar kümesi, doğal sayılar ile bunların negatiflerinin birleşimidir. Z = {..., -2, -1, 0, 1, 2, ...} şeklinde gösterilir. Pozitif tam sayılar, negatif tam sayılar ve sıfırın birleşimidir."
+    },
+    {
+        "id": "tyt_matematik",
+        "kc": "matematik_turev_temel",
+        "text": "# Türev Nedir?\nTürev, bir fonksiyonun bir noktadaki değişim oranını ifade eder. Geometrik olarak, fonksiyonun o noktadaki teğetinin eğimine eşittir. f'(x) veya dy/dx şeklinde gösterilir."
     },
     {
         "id": "tyt_fizik",
         "kc": "fizik_kuvvet_newton_yasaları",
-        "text": "# Newton'ın Hareket Yasaları\n1. Eylemsizlik Prensibi\n2. Dinamiğin Temel Prensibi (F=ma)\n3. Etki-Tepki Prensibi"
+        "text": "# Newton'ın Hareket Yasaları\n1. Eylemsizlik Prensibi: Bir cisim üzerine etki eden net kuvvet sıfırsa cisim hareket durumunu korur.\n2. Dinamiğin Temel Prensibi: F = m.a. Kuvvet eşittir kütle çarpı ivme.\n3. Etki-Tepki Prensibi: Her etkiye karşılık eşit ve zıt yönlü bir tepki vardır."
+    },
+    {
+        "id": "tyt_fizik",
+        "kc": "fizik_optik_isik_hizi",
+        "text": "# Işık Hızı ve Kırılma\nIşık boşlukta yaklaşık 300.000 km/s hızla yayılır. Işığın farklı bir ortama geçerken doğrultu değiştirmesine kırılma denir. Kırılma indisi n = c / v formülü ile hesaplanır."
+    },
+    {
+        "id": "tyt_kimya",
+        "kc": "kimya_atom_yapisi",
+        "text": "# Atomun Yapısı\nAtom; proton, nötron ve elektronlardan oluşur. Proton ve nötronlar çekirdekte, elektronlar ise yörüngelerde bulunur. Proton sayısı atom numarasını belirler."
+    },
+    {
+        "id": "tyt_biyoloji",
+        "kc": "biyoloji_hucre_organeller",
+        "text": "# Hücre Organelleri\nMitokondri: Enerji üretimi. Ribozom: Protein sentezi. Lizozom: Hücre içi sindirim. Golgi aygıtı: Salgı paketleme. Kloroplast: Fotosentez (bitkilerde)."
     }
 ]
 

@@ -12,6 +12,58 @@ function getLevel(score) {
   return LEVELS.find((l) => score < l.max) || LEVELS[LEVELS.length - 1];
 }
 
+function RadarChart({ subjects }) {
+  const entries = Object.entries(subjects);
+  const size = 300;
+  const center = size / 2;
+  const radius = size * 0.4;
+  const angleStep = (Math.PI * 2) / entries.length;
+
+  const points = entries.map(([subject, kcs], i) => {
+    const avg = kcs.reduce((s, kc) => s + kc.p_mastery, 0) / kcs.length;
+    const x = center + radius * avg * Math.cos(i * angleStep - Math.PI / 2);
+    const y = center + radius * avg * Math.sin(i * angleStep - Math.PI / 2);
+    return { x, y, name: subject, score: avg };
+  });
+
+  const polygonPoints = points.map(p => `${p.x},${p.y}`).join(" ");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {/* Background webs */}
+        {[0.25, 0.5, 0.75, 1].map(r => (
+          <circle key={r} cx={center} cy={center} r={radius * r} fill="none" stroke="var(--border)" strokeDasharray="4 2" />
+        ))}
+        {/* Axes */}
+        {entries.map((_, i) => {
+          const x = center + radius * Math.cos(i * angleStep - Math.PI / 2);
+          const y = center + radius * Math.sin(i * angleStep - Math.PI / 2);
+          return <line key={i} x1={center} y1={center} x2={x} y2={y} stroke="var(--border)" />;
+        })}
+        {/* Data polygon */}
+        <polygon points={polygonPoints} fill="var(--primary)" fillOpacity="0.2" stroke="var(--primary)" strokeWidth="2" />
+        {/* Labels */}
+        {points.map((p, i) => (
+          <text 
+            key={i} 
+            x={center + (radius + 20) * Math.cos(i * angleStep - Math.PI / 2)} 
+            y={center + (radius + 20) * Math.sin(i * angleStep - Math.PI / 2)}
+            fontSize="10"
+            fontWeight="600"
+            fill="var(--text-3)"
+            textAnchor="middle"
+            dominantBaseline="middle"
+          >
+            {p.name.split(" ")[0]}
+          </text>
+        ))}
+      </svg>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-2)" }}>Konu Bazlı Hakimiyet Dağılımı</div>
+    </div>
+  );
+}
+
 export default function ProfilePage({ auth }) {
   const { access_token: token, learner_id: learnerId, email } = auth;
   const [profile, setProfile] = useState(null);
@@ -60,6 +112,29 @@ export default function ProfilePage({ auth }) {
             <span className={styles.overallLabel}>{totalLevel.label}</span>
           </div>
         )}
+      </div>
+      
+      {/* ── Visual Mastery Radar ── */}
+      {Object.keys(subjects).length > 2 && (
+        <div className={styles.radarSection}>
+          <RadarChart subjects={subjects} />
+        </div>
+      )}
+
+      {/* ── Export ── */}
+      <div className={styles.exportSection}>
+        <button 
+          className={styles.exportBtn}
+          onClick={() => window.open(`${import.meta.env.VITE_API_URL || ""}/export/mastery/${learnerId}/csv`, "_blank")}
+        >
+          Mastery (CSV)
+        </button>
+        <button 
+          className={styles.exportBtn}
+          onClick={() => window.open(`${import.meta.env.VITE_API_URL || ""}/export/interactions/${learnerId}/csv`, "_blank")}
+        >
+          Geçmiş (CSV)
+        </button>
       </div>
 
       {/* ── Legend ── */}

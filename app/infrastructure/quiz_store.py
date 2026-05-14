@@ -86,10 +86,30 @@ class QuizStore:
         )
         session.add(ans)
         
-        # update quiz score
+        # Kümülatif skor hesapla: tüm cevapların doğruluk oranı
         quiz = await session.get(QuizSessionORM, quiz_id)
         if quiz:
-            quiz.status = "completed"
-            quiz.score = 100.0 if is_correct else 0.0
-            
+            # Quiz'deki toplam soru sayısını bul
+            total_questions_result = await session.execute(
+                select(QuizQuestionORM).where(QuizQuestionORM.quiz_id == quiz_id)
+            )
+            total_questions = len(total_questions_result.scalars().all())
+
+            # Şimdiye kadarki toplam cevap sayısını ve doğru sayısını bul
+            answers_result = await session.execute(
+                select(QuizAnswerORM).where(QuizAnswerORM.quiz_id == quiz_id)
+            )
+            all_answers = answers_result.scalars().all()
+            total_answered = len(all_answers) + 1  # +1 çünkü bu cevap henüz flush edilmedi
+            correct_count = sum(1 for a in all_answers if a.is_correct) + (1 if is_correct else 0)
+
+            # Skor = (doğru cevap / toplam soru) × 100
+            quiz.score = (correct_count / total_questions * 100) if total_questions > 0 else 0.0
+
+            # Tüm sorular cevaplandıysa quiz'i tamamla
+            if total_answered >= total_questions:
+                quiz.status = "completed"
+            else:
+                quiz.status = "in_progress"
+
         await session.flush()
