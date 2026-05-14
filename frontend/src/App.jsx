@@ -98,7 +98,7 @@ export default function App() {
           <ChatPage auth={auth} />
         </div>
         <div className={tab === "profile" ? styles.tabPane : styles.tabPaneHidden}>
-          <ProfilePage auth={auth} />
+          {tab === "profile" && <ProfilePage auth={auth} />}
         </div>
       </div>
     </div>

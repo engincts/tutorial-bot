@@ -90,6 +90,7 @@ async def login(body: LoginIn) -> TokenOut:
 
     return TokenOut(
         access_token=res.session.access_token,
+        refresh_token=res.session.refresh_token,
         learner_id=uuid.UUID(res.user.id),
         email=res.user.email or body.email,
     )

@@ -75,3 +75,4 @@ async def delete_conversation(
     db: AsyncSession = Depends(get_session),
 ) -> None:
     await store.delete_session(db, session_id)
+    await db.commit()

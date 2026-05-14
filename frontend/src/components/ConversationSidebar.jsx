@@ -43,12 +43,22 @@ export default function ConversationSidebar({
           <div
             key={s.id}
             className={`${styles.item} ${s.id === activeId ? styles.active : ""}`}
-            onClick={() => onSelect(s)}
           >
-            <div className={styles.itemBody}>
-              <span className={styles.title}>{s.title}</span>
-              <span className={styles.time}>{timeLabel(s.updated_at)}</span>
-            </div>
+            <a
+              href={`?session_id=${s.id}`}
+              className={styles.itemLink}
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey) {
+                  e.preventDefault();
+                  onSelect(s);
+                }
+              }}
+            >
+              <div className={styles.itemBody}>
+                <span className={styles.title}>{s.title}</span>
+                <span className={styles.time}>{timeLabel(s.updated_at)}</span>
+              </div>
+            </a>
             <button
               className={styles.deleteBtn}
               onClick={(e) => handleDelete(e, s.id)}
