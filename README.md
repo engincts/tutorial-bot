@@ -40,6 +40,8 @@ graph TD
     Worker --> Reflection[Memory Reflection]
 ```
 
+Detaylı mimari kararlar, bileşen etkileşimleri ve veri şeması için [ARCHITECTURE.md](ARCHITECTURE.md) dosyasını inceleyebilirsiniz.
+
 ## 🛠️ Kurulum
 
 ### Gereksinimler

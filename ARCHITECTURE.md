@@ -64,7 +64,9 @@ tutor-bot/
 │   │   │   ├── prompt_builder.py          # System + context prompt birleştirme
 │   │   │   ├── conversation_summarizer.py # Context window koruma (özetleme)
 │   │   │   ├── correctness_evaluator.py   # LLM ile doğruluk değerlendirmesi → KT sinyali
-│   │   │   └── misconception_detector.py  # LLM ile kavram yanılgısı tespiti
+│   │   │   ├── misconception_detector.py  # LLM ile kavram yanılgısı tespiti
+│   │   │   ├── hallucination_monitor.py   # LLM-as-judge: uydurma kontrolü
+│   │   │   └── quiz_generator.py          # Konu bazlı adaptif soru üretimi
 │   │   │
 │   │   ├── content_rag/
 │   │   │   ├── chunker.py                 # Yapı-farkındalıklı metin bölme
@@ -267,7 +269,7 @@ ChatOrchestrator.chat() başlar
 │   → active_kc_ids + mastery_snapshot güncelle
 │   → SessionManager.save() → Redis
 │
-├─ ADIM 10: Doğruluk Değerlendirmesi + Kavram Yanılgısı Tespiti (Paralel)
+├─ ADIM 10: Değerlendirme (Paralel)
 │   ├─ A) CorrectnessEvaluator.evaluate()
 │   │    → LLM: Öğrencinin anlayışı doğru mu?
 │   │    → Döndür: True | False | None
@@ -285,7 +287,7 @@ ChatOrchestrator.chat() başlar
 │   job = {
 │     learner_id, session_id, interaction_type,
 │     content_summary, kc_tags, new_mastery,
-│     subject, misconceptions
+│     subject, misconceptions, hallucination_score
 │   }
 │
 └─ ADIM 13: İstemciye Yanıt Dön
@@ -315,7 +317,9 @@ ChatOrchestrator.chat() başlar
       → MisconceptionStore.add() → student_errors
    c) Her KC için:
       → ProfileRetriever.upsert_kc_mastery() → mastery_scores
-   d) session.commit()
+   d) HallucinationMonitor.evaluate():
+      → LLM-as-judge: Uydurma skoru hesapla ve kaydet
+   e) session.commit()
 4. Hata durumunda: 3 kez yeniden dene (2s/4s/8s), sonra DLQ'ya taşı
 5. Döngü (sonsuz)
 ```
@@ -439,28 +443,30 @@ Döndür: IngestionResult(document_id, chunks_written, chars_total)
 - Metadata korunur (başlık, kaynak türü)
 - KC etiketleri chunk'larla ilişkilendirilir
 
-### 6.2 Retrieval (Geri Alma)
+### 6.2 Retrieval (Hybrid Geri Alma)
 
-**Dosya:** [app/services/content_rag/retriever.py](app/services/content_rag/retriever.py)
+**Dosya:** [app/services/content_rag/retriever.py](app/services/content_rag/retriever.py) ve [app/infrastructure/pg_vector_store.py](app/infrastructure/pg_vector_store.py)
 
+Sistem, sadece semantik arama yerine **Hybrid Search** kullanarak daha isabetli sonuçlar üretir:
+
+1.  **Dense Search (Vektör)**: Sorguyu embed eder ve `pgvector` ile kosinüs mesafesine göre en yakın 50 chunk'ı bulur.
+2.  **Sparse Search (Anahtar Kelime)**: `pg_trgm` similarity fonksiyonunu kullanarak sorgu ile metin benzerliğine göre en yakın 50 chunk'ı bulur.
+3.  **Reciprocal Rank Fusion (RRF)**: İki listeden gelen sonuçları şu formülle birleştirir:
+    `score = 1 / (k + rank_dense) + 1 / (k + rank_sparse)` (varsayılan k=60)
+4.  **Final Ranking**: En yüksek RRF skoruna sahip `top_k` chunk seçilir.
+
+**Akış:**
 ```
 Kullanıcı sorgusu: "Gradient descent nasıl çalışır?"
 │
 ▼
-1. embedder.embed(query) → 1024 boyutlu vektör
+1. Paralel Arama:
+   ├─ Vektör: embedding <=> query_embedding
+   └─ Metin:  similarity(content, query)
 │
 ▼
-2. PgVectorStore.search_content(
-     query_embedding,
-     top_k=5,
-     kc_filter=ctx.active_kc_ids   # opsiyonel
-   )
-   
-   SQL (pgvector):
-   SELECT * FROM curriculum_chunks
-   ORDER BY embedding <-> query_embedding   -- cosine mesafesi
-   LIMIT 5
-   [WHERE kc_tags && kc_filter]
+2. RRF Birleştirme (Reciprocal Rank Fusion)
+   → Her iki listedeki sıralamaları ağırlıklandırarak birleştirir
 │
 ▼
 3. Opsiyonel: Reranker.rerank(query, chunks, top_k)
@@ -701,11 +707,20 @@ RERANK_ENABLED            = false
 | POST | `/auth/register` | — | Yeni öğrenci kaydı (Supabase) |
 | POST | `/auth/login` | — | Giriş → JWT token |
 | POST | `/chat` | JWT | Ana sohbet: mastery + RAG + pedagoji → LLM yanıtı |
+| POST | `/chat/stream` | JWT | **SSE** gerçek zamanlı yanıt |
+| POST | `/quiz/generate-adaptive`| JWT | Konu hakimiyetine göre zorluğu ayarlanmış soru üret |
+| POST | `/quiz/generate-batch` | JWT | Çoklu soru (multi-turn) üret |
 | POST | `/ingest/text` | JWT | Metin al → chunk → embedding |
 | POST | `/ingest/pdf` | JWT | PDF al → chunk → embedding |
+| POST | `/upload` | JWT | PDF/Docx döküman yükle ve RAG'a ekle |
 | GET | `/profile/{learner_id}` | JWT | Öğrenci profili + konuya göre mastery |
+| GET | `/admin/hallucination-logs`| JWT | Tespit edilen uydurma logları |
+| GET | `/admin/stats` | JWT | Sistem geneli kullanım istatistikleri |
+| GET | `/admin/learners` | JWT | Öğrenci ilerleme listesi |
+| GET | `/export/mastery/{id}/csv`| JWT | Mastery verilerini CSV olarak indir |
 | POST | `/session/reset` | JWT | Redis'ten oturumu temizle |
 | GET | `/health` | — | Sağlık kontrolü |
+| GET | `/metrics` | — | Prometheus metrikleri |
 
 ---
 
@@ -816,3 +831,18 @@ RERANK_ENABLED            = false
 │  → IngestionResult dön                                               │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 17. Hallucination Monitoring (LLM-as-judge)
+
+**Dosya:** [app/services/orchestration/hallucination_monitor.py](app/services/orchestration/hallucination_monitor.py)
+
+Sistem, üretilen yanıtların kaynak dökümanlara sadakatini ölçmek için bir denetleyici mekanizma kullanır:
+
+1.  **Değerlendirme**: Her `/chat` yanıtından sonra, asistanın yanıtı ve kullanılan kaynaklar (context) ayrı bir LLM çağrısına ("Judge") gönderilir.
+2.  **Puanlama**: Judge LLM, yanıtın kaynaklara ne kadar sadık olduğunu 0.0 (tam sadık) ile 1.0 (tam uydurma) arasında puanlar.
+3.  **Kayıt**: Bu skorlar, `hallucination_logs` tablosuna (SQL) kaydedilir.
+4.  **Uyarı**: Skor 0.7'nin üzerindeyse, sistem loglarında kritik bir uyarı (🚨 HIGH HALLUCINATION) oluşturulur.
+
+**Amaç:** Sistem güvenilirliğini izlemek ve RAG kalitesini sürekli iyileştirmek için veri toplamak.
