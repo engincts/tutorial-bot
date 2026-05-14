@@ -3,6 +3,60 @@ import uuid
 import pytest
 from app.services.knowledge_tracing.dkt_model import DKTModel
 from app.services.knowledge_tracing.akt_model import AKTModel
+from app.services.knowledge_tracing.bkt_model import BKTModel
+
+
+class TestBKTModel:
+    @pytest.fixture
+    def model(self):
+        return BKTModel()
+
+    @pytest.fixture
+    def learner(self):
+        return uuid.uuid4()
+
+    @pytest.mark.asyncio
+    async def test_initial_estimate_is_prior(self, model, learner):
+        result = await model.estimate(learner, ["physics"])
+        assert result["physics"] == pytest.approx(0.1, abs=0.01)
+
+    @pytest.mark.asyncio
+    async def test_correct_answer_increases_mastery(self, model, learner):
+        before = (await model.estimate(learner, ["physics"]))["physics"]
+        await model.update(learner, "physics", correct=True)
+        after = (await model.estimate(learner, ["physics"]))["physics"]
+        assert after > before
+        # BKT check: P(L|correct) should be ~0.24 given defaults
+        assert after > 0.2
+
+    @pytest.mark.asyncio
+    async def test_wrong_answer_decreases_mastery(self, model, learner):
+        await model.update(learner, "physics", correct=True)
+        high = (await model.estimate(learner, ["physics"]))["physics"]
+        await model.update(learner, "physics", correct=False)
+        lower = (await model.estimate(learner, ["physics"]))["physics"]
+        assert lower < high
+
+    @pytest.mark.asyncio
+    async def test_soft_update_stability(self, model, learner):
+        # Confidence 0.7 should increase mastery but less than a full correct=True
+        await model.soft_update(learner, "physics", confidence=0.7)
+        p1 = (await model.estimate(learner, ["physics"]))["physics"]
+        
+        # New model for comparison
+        model2 = BKTModel()
+        await model2.update(learner, "physics", correct=True)
+        p2 = (await model2.estimate(learner, ["physics"]))["physics"]
+        
+        assert p1 < p2
+        assert p1 > 0.1
+
+    @pytest.mark.asyncio
+    async def test_mastery_bounded(self, model, learner):
+        for _ in range(50):
+            await model.update(learner, "x", correct=True)
+        p = (await model.estimate(learner, ["x"]))["x"]
+        assert 0.01 <= p <= 0.99
 
 
 class TestDKTModel:

@@ -130,3 +130,43 @@ export async function uploadFile(file) {
   return res.json();
 }
 
+
+export const admin = {
+  getStats: async () => {
+    const token = await freshToken();
+    const res = await fetch(${BASE}/admin/stats, { headers: { Authorization: \Bearer \ } });
+    return res.json();
+  },
+  getHallucinationLogs: async () => {
+    const token = await freshToken();
+    const res = await fetch(${BASE}/admin/hallucination-logs, { headers: { Authorization: \Bearer \ } });
+    return res.json();
+  }
+};
+
+export const quiz = {
+  generateBatch: async (learnerId, kcId, count) => {
+    const token = await freshToken();
+    const res = await fetch(${BASE}/quiz/generate-batch, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ learner_id: learnerId, kc_id: kcId, question_count: count })
+    });
+    return res.json();
+  },
+  submitAnswer: async (learnerId, quizId, questionId, answer) => {
+    const token = await freshToken();
+    const res = await fetch(${BASE}/quiz/answer, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ learner_id: learnerId, quiz_id: quizId, question_id: questionId, answer })
+    });
+    return res.json();
+  }
+};
+
+export const learner = {
+  getProfile: getProfile
+};
+
+export default { login, register, sendChat, getProfile, resetSession, listConversations, getConversationMessages, deleteConversation, uploadFile, admin, quiz, learner };
