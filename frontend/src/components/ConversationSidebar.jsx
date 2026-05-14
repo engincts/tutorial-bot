@@ -69,6 +69,40 @@ export default function ConversationSidebar({
           </div>
         ))}
       </div>
+
+      <div className={styles.footer}>
+        <input
+          type="file"
+          id="doc-upload"
+          hidden
+          accept=".pdf,.docx,.txt,.md"
+          onChange={async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const btn = e.target.parentElement.querySelector("button");
+            const originalText = btn.innerText;
+            try {
+              btn.innerText = "Yükleniyor...";
+              btn.disabled = true;
+              await import("../api").then(api => api.uploadFile(file));
+              alert("Dosya başarıyla yüklendi ve işlendi!");
+            } catch (err) {
+              alert("Hata: " + err.message);
+            } finally {
+              btn.innerText = originalText;
+              btn.disabled = false;
+              e.target.value = "";
+            }
+          }}
+        />
+        <button 
+          className={styles.uploadBtn}
+          onClick={() => document.getElementById("doc-upload").click()}
+        >
+          <UploadIcon />
+          <span>Döküman Yükle</span>
+        </button>
+      </div>
     </aside>
   );
 }
@@ -91,3 +125,14 @@ function TrashIcon() {
     </svg>
   );
 }
+
+function UploadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+}
+

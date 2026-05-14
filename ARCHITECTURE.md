@@ -20,7 +20,7 @@
 | Cache / Queue | Redis 7 |
 | LLM | OpenAI / Anthropic / Novita (yapılandırılabilir) |
 | Embedding | BGE-M3 / OpenAI / Novita (yapılandırılabilir) |
-| Knowledge Tracing | AKT / DKT (saf Python, PyTorch gerektirmez) |
+| Knowledge Tracing | BKT (varsayılan) / AKT / DKT (saf Python, PyTorch gerektirmez) |
 | ORM | SQLAlchemy 2.0 async |
 | Monitoring | Prometheus Metrics + JSON Structured Logging |
 | Proxy | Nginx (SSE & SSL support) |
@@ -83,6 +83,7 @@ tutor-bot/
 │   │   └── knowledge_tracing/
 │   │       ├── base.py                    # BaseKnowledgeTracer arayüzü
 │   │       ├── kc_mapper.py               # LLM: sorgudan KC ID'leri çıkar
+│   │       ├── bkt_model.py               # BKT (Bayesian Knowledge Tracing — varsayılan)
 │   │       ├── akt_model.py               # AKT (monotonic attention decay)
 │   │       ├── dkt_model.py               # DKT (Bayesian Knowledge Tracing formülleri)
 │   │       └── mastery_estimator.py       # KCMapper + Tracer koordinasyonu
@@ -173,7 +174,7 @@ updated_at        TIMESTAMP
 ```sql
 learner_id       UUID   PK (composite)
 kc_id            TEXT   PK (composite)
-p_mastery        FLOAT  -- [0, 1] AKT/DKT çıktısı
+p_mastery        FLOAT  -- [0, 1] BKT/AKT/DKT çıktısı
 attempts         INT
 last_interaction TIMESTAMP
 subject          TEXT   -- müfredat alanı
@@ -584,6 +585,58 @@ p_posterior = numerator / denominator
 → [0, 1] aralığında kırp
 ```
 
+### 7.4 BKT Modeli (Bayesian Knowledge Tracing — Varsayılan)
+
+**Dosya:** [app/services/knowledge_tracing/bkt_model.py](app/services/knowledge_tracing/bkt_model.py)
+
+Corbett & Anderson (1994) — Eğitim teknolojisinin altın standardı. Hidden Markov Model tabanlı.
+
+**Parametreler:**
+```
+P_INIT   = 0.1    # Başlangıç bilgi olasılığı (prior)
+P_LEARN  = 0.15   # Bir etkileşimde öğrenme olasılığı
+P_SLIP   = 0.10   # Biliyor ama yanlış yapma olasılığı
+P_GUESS  = 0.20   # Bilmiyor ama doğru tahmin olasılığı
+P_FORGET = 0.02   # Uzun süre görmezse unutma oranı
+```
+
+**Bayesian güncelleme (Bayes Posterior):**
+```
+Doğru cevap için:
+  P(L|correct) = P(correct|L) × P(L) / P(correct)
+  P(correct|L) = 1 - P(S),  P(correct|¬L) = P(G)
+
+Yanlış cevap için:
+  P(L|wrong) = P(wrong|L) × P(L) / P(wrong)
+  P(wrong|L) = P(S),  P(wrong|¬L) = 1 - P(G)
+
+numerator   = P(gözlem|L) × P(L)
+denominator = numerator + P(gözlem|¬L) × (1 - P(L))
+p_posterior = numerator / denominator
+```
+
+**Öğrenme geçişi:**
+```
+p_new = p_posterior + (1 - p_posterior) × P(T)
+→ [0.01, 0.99] aralığında kırp
+```
+
+**LLM Hibrit Modu (Soft Update):**
+
+Sohbet ortamında binary doğru/yanlış yerine LLM'den gelen güven skoru (0.0-1.0) kullanılır:
+```
+p_obs_given_L     = confidence × (1-P_SLIP) + (1-confidence) × P_SLIP
+p_obs_given_not_L = confidence × P_GUESS   + (1-confidence) × (1-P_GUESS)
+
+Bayes posterior hesapla → öğrenme geçişi (güvene orantılı)
+```
+
+**Neden BKT?**
+- Matematiksel temel: Bayes teoremi geregi az veriyle radikal değişim imkansız
+- Yorumlanabilirlik: Her parametre ne yaptığı açık
+- Akademik kabul: 30 yıllık altın standart
+- Eğitim verisi gerektirmez (DKT/AKT'nin aksine)
+
 ---
 
 ## 8. Pedagojik Stratejiler
@@ -690,7 +743,7 @@ FastAPI Depends(get_session) → AsyncSession:
 ```
 LLM_PROVIDER              = openai | anthropic | novita
 EMBEDDER_PROVIDER         = bge_m3 | openai | novita
-KT_MODEL                  = akt | dkt
+KT_MODEL                  = bkt (varsayılan) | akt | dkt
 MASTERY_THRESHOLD_LOW     = 0.4
 MASTERY_THRESHOLD_HIGH    = 0.7
 CONTENT_TOP_K             = 5
@@ -801,7 +854,7 @@ RERANK_ENABLED            = false
 │  │  curriculum_chunks          │    → RetrievedChunk[]              │
 │  │  chat_history               │    → InteractionEmbedding[]        │
 │  └─────────────────────────────┘                                    │
-│  LLM → KC ID çıkar → DB'den mastery yükle → AKT/DKT tahmin et     │
+│  LLM → KC ID çıkar → DB'den mastery yükle → BKT tahmin et          │
 │  PedagogyPlanner → strateji seç → prompt oluştur                   │
 │  LLM → yanıt üret                                                   │
 │  Redis → oturumu güncelle                                           │

@@ -23,6 +23,7 @@ class EmbedderProvider(StrEnum):
 
 
 class KTModel(StrEnum):
+    BKT = "bkt"
     AKT = "akt"
     DKT = "dkt"
 
@@ -72,7 +73,7 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = 3600
 
     # ── Knowledge Tracing ────────────────────────────────────────────
-    kt_model: KTModel = KTModel.AKT
+    kt_model: KTModel = KTModel.BKT
     kt_model_path: str = "./checkpoints/akt_assistments.pt"
 
     # ── Retrieval ────────────────────────────────────────────────────

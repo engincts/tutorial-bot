@@ -5,7 +5,11 @@ const BASE = "/api";
 // Her API çağrısından önce Supabase'den güncel token alır (otomatik refresh)
 async function freshToken() {
   const { data: { session }, error } = await supabase.auth.getSession();
-  if (error || !session) throw new Error("Oturum sona erdi, lütfen tekrar giriş yapın.");
+  if (error || !session) {
+    // Oturum yoksa veya hata varsa signOut yaparak App.jsx'teki onAuthStateChange'i tetikle
+    await supabase.auth.signOut().catch(() => {});
+    throw new Error("Oturum sona erdi, lütfen tekrar giriş yapın.");
+  }
   return session.access_token;
 }
 
@@ -105,3 +109,24 @@ export async function deleteConversation(_token, sessionId) {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+export async function uploadFile(file) {
+  const token = await freshToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE}/upload`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Dosya yüklenemedi");
+  }
+  return res.json();
+}
+

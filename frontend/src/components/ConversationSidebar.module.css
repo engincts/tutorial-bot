@@ -45,4 +45,39 @@
 .item:hover .deleteBtn { opacity: 1; }
 .deleteBtn:hover { color: var(--danger); background: rgba(244,63,94,.1); }
 
+.footer {
+  padding: 12px 10px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.uploadBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: 1px dashed var(--border);
+}
+
+.uploadBtn:hover:not(:disabled) {
+  background: var(--primary-glow);
+  color: var(--primary);
+  border-color: var(--primary);
+  border-style: solid;
+}
+
+.uploadBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) { .sidebar { display: none; } }
+
