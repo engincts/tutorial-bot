@@ -113,6 +113,11 @@ class ChatStore:
         session_id: uuid.UUID,
     ) -> None:
         await session.execute(
+            text("DELETE FROM chat_messages WHERE session_id = CAST(:id AS uuid)").bindparams(
+                id=str(session_id)
+            )
+        )
+        await session.execute(
             text("DELETE FROM chat_sessions WHERE id = CAST(:id AS uuid)").bindparams(
                 id=str(session_id)
             )

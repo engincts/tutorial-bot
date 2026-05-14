@@ -82,7 +82,7 @@ class ProfileRetriever:
         return LearnerProfile(
             id=row.id,
             display_name=row.display_name or display_name,
-            preferred_language=row.preferred_language,
+            preferred_language=row.preferred_language or "tr",
             preferences=json.loads(row.preferences or "{}"),
             created_at=row.created_at,
             updated_at=row.updated_at,

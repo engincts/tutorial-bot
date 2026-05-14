@@ -25,10 +25,10 @@ class KCMasteryOut(BaseModel):
 
 class ProfileOut(BaseModel):
     learner_id: uuid.UUID
-    display_name: str
-    preferred_language: str
-    preferences: dict
-    mastery_by_subject: dict[str, list[KCMasteryOut]]
+    display_name: str | None = "Öğrenci"
+    preferred_language: str | None = "tr"
+    preferences: dict | None = {}
+    mastery_by_subject: dict[str, list[KCMasteryOut]] = {}
 
 
 def _format_subject(raw: str) -> str:

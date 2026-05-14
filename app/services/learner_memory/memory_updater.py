@@ -87,7 +87,12 @@ class MemoryUpdater:
                     )
 
                 # 4. KT mastery güncellemeleri
-                for kc_id, p_mastery in eval_mastery.items():
+                for kc_id in interaction.kc_tags:
+                    p_mastery = eval_mastery.get(kc_id)
+                    if p_mastery is None:
+                        # Eğer LLM değerlendirmediyse (veya soru sorulduğu için skorlanmadıysa), mevcut/baz skoru kullan
+                        p_mastery = current_mastery.get(kc_id, 0.3) if 'current_mastery' in locals() else 0.3
+
                     # Eğer subject_map verilmemişse orchestrator'dan gelen subject'i kullan
                     per_kc_subject = subject
                     if not per_kc_subject:
@@ -126,7 +131,7 @@ class MemoryUpdater:
                             from sqlalchemy.dialects.postgresql import UUID
                             await session.execute(
                                 text("UPDATE student_profiles SET preferences = :prefs WHERE id = :lid")
-                                .bindparams(prefs=json.dumps(prefs), lid=profile.learner_id)
+                                .bindparams(prefs=json.dumps(prefs), lid=profile.id)
                             )
                             
                 # 6. Hallucination check

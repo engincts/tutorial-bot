@@ -21,8 +21,12 @@
 .empty { font-size: 13px; color: var(--text-3); padding: 24px 10px; text-align: center; }
 
 .item {
-  display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-  border-radius: var(--radius-sm); transition: .12s; cursor: pointer;
+  display: flex; align-items: center; gap: 4px;
+  border-radius: var(--radius-sm); transition: .12s;
+}
+.itemLink {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; text-decoration: none; min-width: 0;
 }
 .item:hover { background: var(--bg-surface-2); }
 .item.active { background: var(--primary-glow); }
@@ -36,6 +40,7 @@
   opacity: 0; flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
   background: transparent; color: var(--text-3); display: flex;
   align-items: center; justify-content: center; transition: .12s;
+  margin-right: 8px;
 }
 .item:hover .deleteBtn { opacity: 1; }
 .deleteBtn:hover { color: var(--danger); background: rgba(244,63,94,.1); }

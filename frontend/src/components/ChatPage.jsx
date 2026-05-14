@@ -75,7 +75,10 @@ export default function ChatPage({ auth }) {
   const { access_token: token, learner_id: learnerId } = auth;
 
   const [sessions, setSessions] = useState([]);
-  const [currentSessionId, setCurrentSessionId] = useState(() => generateSessionId());
+  const [currentSessionId, setCurrentSessionId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("session_id") || generateSessionId();
+  });
   const [messages, setMessages] = useState([WELCOME]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -103,6 +106,9 @@ export default function ChatPage({ auth }) {
   // Var olan bir sohbeti seç
   async function handleSelectSession(session) {
     setCurrentSessionId(session.id);
+    const url = new URL(window.location);
+    url.searchParams.set("session_id", session.id);
+    window.history.pushState({}, "", url);
     setError("");
     setLoading(true);
     const msgs = await getConversationMessages(token, session.id);
@@ -119,6 +125,9 @@ export default function ChatPage({ auth }) {
   function handleNewSession() {
     const id = generateSessionId();
     setCurrentSessionId(id);
+    const url = new URL(window.location);
+    url.searchParams.delete("session_id");
+    window.history.pushState({}, "", url);
     setMessages([WELCOME]);
     setError("");
     inputRef.current?.focus();
