@@ -23,11 +23,13 @@ export default function App() {
           });
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        // Hata durumunda auth'u temizle (redirect tetikler)
+        setAuth(null);
+      })
       .finally(() => {
         setAuthReady(true);
       });
-
 
     // Token yenilendiğinde veya oturum değiştiğinde güncelle
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -42,7 +44,21 @@ export default function App() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Kullanıcı sekmeye geri döndüğünde oturumu tazele/kontrol et
+    const handleFocus = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) setAuth(null);
+      } catch {
+        setAuth(null);
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   function handleLogin(data) {

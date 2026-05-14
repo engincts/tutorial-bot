@@ -42,8 +42,8 @@ class AKTModel(BaseKnowledgeTracer):
     def __init__(
         self,
         checkpoint_path: str | None = None,
-        decay_factor: float = 0.85,
-        confidence_alpha: float = 5.0,
+        decay_factor: float = 0.94,
+        confidence_alpha: float = 12.0,
     ) -> None:
         self._decay = decay_factor
         self._alpha = confidence_alpha  # attempts → confidence hızı

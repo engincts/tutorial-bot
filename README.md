@@ -4,7 +4,7 @@ Kişiselleştirilmiş AI tabanlı öğrenci asistanı. Öğrencinin bilgi seviye
 
 ## 🚀 Öne Çıkan Özellikler
 
-- **Adaptif Öğrenme**: AKT/DKT modelleri ile öğrencinin her konu için hakimiyet seviyesini (mastery) izler.
+- **Adaptif Öğrenme**: BKT (Bayesian Knowledge Tracing) modeli ile öğrencinin her konu için hakimiyet seviyesini (mastery) kademeli ve kararlı şekilde izler.
 - **Hybrid Retrieval (RRF)**: Semantik (pgvector) ve anahtar kelime (pg_trgm) aramayı birleştirerek en doğru içeriği getirir.
 - **Hallucination Monitoring**: LLM yanıtlarını kaynak dökümanlarla kıyaslayarak uydurma (hallucination) skorunu hesaplar.
 - **SSE Streaming**: Yanıtları gerçek zamanlı (token-token) akıtır.
@@ -24,7 +24,7 @@ graph TD
         Orchestrator --> KCMapper[KC Mapper: Konu Tespiti]
         Orchestrator --> ContentRAG[Hybrid RAG: Müfredat]
         Orchestrator --> MemoryRAG[Learner Memory: Geçmiş]
-        Orchestrator --> Mastery[Mastery Estimator: AKT/DKT]
+        Orchestrator --> Mastery[Mastery Estimator: BKT]
     end
     
     Orchestrator --> Planner[Pedagogy Planner: Strateji Seçimi]
