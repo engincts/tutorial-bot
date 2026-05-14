@@ -1,200 +1,51 @@
-.row {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  margin: 5px 0;
-  animation: fadeSlideIn 0.25s ease;
-}
+.row { display: flex; align-items: flex-start; gap: 10px; margin: 4px 0; animation: fadeIn .2s ease; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
 
-@keyframes fadeSlideIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.assistantRow {
-  justify-content: flex-start;
-}
-
-.userRow {
-  justify-content: flex-end;
-}
+.assistantRow { justify-content: flex-start; }
+.userRow { justify-content: flex-end; }
 
 .avatar {
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: rgba(99, 102, 241, 0.15);
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
+  flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+  background: var(--bg-surface-3); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center; font-size: 15px; margin-top: 4px;
 }
 
-.bubble {
-  max-width: min(520px, 80%);
-  border-radius: 18px;
-  padding: 12px 16px;
-  line-height: 1.65;
-}
+.bubble { max-width: min(560px,78%); border-radius: 16px; padding: 12px 16px; line-height: 1.65; }
 
-.assistantBubble {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-light);
-  border-bottom-left-radius: 4px;
-  color: var(--text-main);
-}
-
+.assistantBubble { background: var(--bg-surface-2); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
 .userBubble {
-  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
-  border-bottom-right-radius: 4px;
-  color: #fff;
-  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.25);
+  background: linear-gradient(135deg,#6366f1,#4f46e5); color: #fff;
+  border-bottom-right-radius: 4px; box-shadow: 0 4px 16px rgba(99,102,241,.2);
 }
 
-.content {
-  font-size: 14px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
+.content { font-size: 14px; white-space: pre-wrap; word-break: break-word; }
 
-/* ── Markdown render ─────────────────────────────────────── */
-.markdown {
-  font-size: 14.5px;
-  word-break: break-word;
-  line-height: 1.7;
-}
-
-.markdown p {
-  margin: 0 0 10px 0;
-}
-
-.markdown p:last-child {
-  margin-bottom: 0;
-}
-
-.markdown h1,
-.markdown h2,
-.markdown h3 {
-  font-weight: 700;
-  margin: 16px 0 8px 0;
-  line-height: 1.3;
-  color: var(--text-main);
-}
-
-.markdown h1 { font-size: 19px; }
-.markdown h2 { font-size: 16px; }
-.markdown h3 { font-size: 14px; }
-
-.markdown ul,
-.markdown ol {
-  margin: 6px 0 10px 0;
-  padding-left: 22px;
-}
-
-.markdown li {
-  margin: 4px 0;
-  color: var(--text-muted);
-}
-
-.markdown strong {
-  font-weight: 700;
-  color: var(--text-main);
-}
-
-.markdown em {
-  font-style: italic;
-  color: #A5B4FC;
-}
-
+/* ── Markdown ────────────────────────────────────────────── */
+.markdown { font-size: 14px; word-break: break-word; line-height: 1.7; }
+.markdown p { margin: 0 0 8px; } .markdown p:last-child { margin-bottom: 0; }
+.markdown h1,.markdown h2,.markdown h3 { font-weight: 700; margin: 14px 0 6px; color: var(--text); }
+.markdown h1 { font-size: 18px; } .markdown h2 { font-size: 15px; } .markdown h3 { font-size: 14px; }
+.markdown ul,.markdown ol { margin: 4px 0 8px; padding-left: 20px; }
+.markdown li { margin: 3px 0; color: var(--text-2); }
+.markdown strong { font-weight: 700; color: var(--text); }
+.markdown em { font-style: italic; color: #a5b4fc; }
 .markdown code {
-  font-family: "Fira Mono", "Cascadia Code", "Consolas", monospace;
-  font-size: 13px;
-  background: rgba(99, 102, 241, 0.12);
-  color: #A5B4FC;
-  border-radius: 4px;
-  padding: 2px 6px;
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  font-family: "Fira Mono","Consolas",monospace; font-size: 13px;
+  background: rgba(99,102,241,.1); color: #a5b4fc; border-radius: 4px; padding: 2px 6px;
 }
+.markdown pre { background: var(--bg-app); border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 12px 14px; overflow-x: auto; margin: 8px 0; }
+.markdown pre code { background: none; padding: 0; color: #cbd5e1; }
+.markdown blockquote { border-left: 3px solid var(--primary); margin: 8px 0; padding: 4px 12px; color: var(--text-2); }
+.markdown hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+.markdown table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+.markdown th,.markdown td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+.markdown th { background: var(--bg-surface-3); font-weight: 600; }
 
-.markdown pre {
-  background: rgba(10, 12, 20, 0.8);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  padding: 14px 16px;
-  overflow-x: auto;
-  margin: 10px 0;
-}
-
-.markdown pre code {
-  background: none;
-  padding: 0;
-  border: none;
-  font-size: 13px;
-  color: #CBD5E1;
-}
-
-.markdown blockquote {
-  border-left: 3px solid rgba(99, 102, 241, 0.5);
-  margin: 10px 0;
-  padding: 4px 14px;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-.markdown hr {
-  border: none;
-  border-top: 1px solid var(--border-light);
-  margin: 12px 0;
-}
-
-.markdown table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 10px 0;
-  font-size: 13px;
-}
-
-.markdown th,
-.markdown td {
-  border: 1px solid var(--border-light);
-  padding: 8px 12px;
-  text-align: left;
-}
-
-.markdown th {
-  background: rgba(99, 102, 241, 0.1);
-  color: var(--text-main);
-  font-weight: 600;
-}
-
-/* ── KC tags ─────────────────────────────────────────────── */
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 10px;
-}
-
+/* ── Tags & meta ─────────────────────────────────────────── */
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
 .tag {
-  font-size: 11px;
-  font-weight: 500;
-  background: rgba(99, 102, 241, 0.12);
-  color: #A5B4FC;
-  padding: 2px 8px;
-  border-radius: 99px;
-  text-transform: capitalize;
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  font-size: 11px; font-weight: 500; background: var(--primary-glow); color: #a5b4fc;
+  padding: 2px 8px; border-radius: 99px; text-transform: capitalize;
 }
-
-/* ── Meta info ───────────────────────────────────────────── */
-.meta {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 7px;
-}
-
-.userBubble .meta {
-  color: rgba(255, 255, 255, 0.5);
-}
+.meta { font-size: 11px; color: var(--text-3); margin-top: 6px; }
+.userBubble .meta { color: rgba(255,255,255,.45); }

@@ -11,18 +11,32 @@ export default function App() {
   const [tab, setTab] = useState("chat");
 
   useEffect(() => {
-    // Sayfa yüklendiğinde mevcut oturumu kontrol et
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setAuth({ access_token: session.access_token, learner_id: session.user.id, email: session.user.email });
-      }
-      setAuthReady(true);
-    });
+    // Supabase erişilemezse 3 saniyede timeout — login ekranını göster
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000));
+    Promise.race([supabase.auth.getSession(), timeout])
+      .then(({ data: { session } }) => {
+        if (session) {
+          setAuth({
+            access_token: session.access_token,
+            learner_id: session.user.id,
+            email: session.user.email,
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setAuthReady(true);
+      });
+
 
     // Token yenilendiğinde veya oturum değiştiğinde güncelle
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
-        setAuth({ access_token: session.access_token, learner_id: session.user.id, email: session.user.email });
+        setAuth({
+          access_token: session.access_token,
+          learner_id: session.user.id,
+          email: session.user.email,
+        });
       } else {
         setAuth(null);
       }
@@ -37,11 +51,17 @@ export default function App() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    try { await supabase.auth.signOut(); } catch {}
     setAuth(null);
   }
 
-  if (!authReady) return null;
+  if (!authReady) {
+    return (
+      <div className={styles.shell} style={{ alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: "var(--text-3)", fontSize: 14 }}>Yükleniyor…</div>
+      </div>
+    );
+  }
 
   if (!auth) return <LoginPage onLogin={handleLogin} />;
 
