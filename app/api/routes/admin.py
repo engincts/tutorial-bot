@@ -10,8 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from app.infrastructure.database import get_session
+from app.api.dependencies_auth import get_current_admin
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(get_current_admin)]
+)
 
 
 class LearnerSummary(BaseModel):

@@ -1,0 +1,263 @@
+.center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.empty { font-size: 15px; font-weight: 500; color: var(--text-2); }
+.emptySub { font-size: 13px; }
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.newBadge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--surface-3);
+  color: var(--text-3);
+  align-self: flex-start;
+}
+
+/* ── Konu seçici ──────────────────────────────── */
+.picker {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.pickerTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pickerSub {
+  font-size: 13px;
+  color: var(--text-3);
+  margin-top: -16px;
+}
+
+.subjectGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.subjectCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s, background .15s;
+}
+
+.subjectCard:hover { border-color: var(--primary); background: var(--surface-2); }
+.subjectCard.selected { border-color: var(--primary); background: var(--primary)11; }
+
+.subjectLabel { font-size: 13px; font-weight: 600; color: var(--text); }
+.subjectCount { font-size: 11px; color: var(--text-3); }
+
+.masteryBadge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+  align-self: flex-start;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.countLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.countSelect {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.startBtn {
+  padding: 10px 28px;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  transition: opacity .15s;
+}
+.startBtn:disabled { opacity: 0.4; }
+.startBtn:not(:disabled):hover { opacity: 0.88; }
+
+/* ── Quiz oyunu ──────────────────────────────── */
+.game {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progressBar {
+  flex: 1;
+  height: 6px;
+  background: var(--surface-3);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 99px;
+  transition: width .4s ease;
+}
+
+.progressText { font-size: 12px; color: var(--text-3); flex-shrink: 0; }
+.scoreText { font-size: 12px; font-weight: 600; color: #22c55e; flex-shrink: 0; }
+
+.questionBox {
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.questionText {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.option {
+  padding: 14px 18px;
+  text-align: left;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+  line-height: 1.5;
+}
+.option:not(:disabled):hover { border-color: var(--primary); background: var(--surface-2); }
+.option:disabled { cursor: default; }
+
+.feedback {
+  padding: 16px 20px;
+  border-radius: 12px;
+  border: 1px solid;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.correct { background: #22c55e11; border-color: #22c55e; color: #15803d; }
+.wrong   { background: #ef444411; border-color: #ef4444; color: #b91c1c; }
+
+.explanation { font-size: 13px; color: var(--text-2); margin: 0; }
+
+.nextBtn {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 8px 18px;
+  border-radius: 7px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity .15s;
+}
+.nextBtn:hover { opacity: 0.88; }
+
+/* ── Sonuç ekranı ────────────────────────────── */
+.result {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+}
+
+.resultScore {
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.resultSub { font-size: 15px; color: var(--text-2); }
+
+.resultActions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.retryBtn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.backBtn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 600;
+}

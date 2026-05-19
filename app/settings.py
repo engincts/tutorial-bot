@@ -89,6 +89,7 @@ class Settings(BaseSettings):
     app_env: AppEnv = AppEnv.DEVELOPMENT
     log_level: str = "INFO"
     allowed_origins: list[str] = Field(default_factory=lambda: ["*"])
+    admin_email: str = "admin@tutorbot.com"
 
     # ── Supabase ─────────────────────────────────────────────────────
     supabase_url: str = Field(default="", repr=False)

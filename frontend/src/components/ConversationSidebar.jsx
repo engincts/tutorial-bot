@@ -13,6 +13,7 @@ function timeLabel(dateStr) {
 
 export default function ConversationSidebar({
   token,
+  role,
   sessions,
   activeId,
   onSelect,
@@ -70,39 +71,7 @@ export default function ConversationSidebar({
         ))}
       </div>
 
-      <div className={styles.footer}>
-        <input
-          type="file"
-          id="doc-upload"
-          hidden
-          accept=".pdf,.docx,.txt,.md"
-          onChange={async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const btn = e.target.parentElement.querySelector("button");
-            const originalText = btn.innerText;
-            try {
-              btn.innerText = "Yükleniyor...";
-              btn.disabled = true;
-              await import("../api").then(api => api.uploadFile(file));
-              alert("Dosya başarıyla yüklendi ve işlendi!");
-            } catch (err) {
-              alert("Hata: " + err.message);
-            } finally {
-              btn.innerText = originalText;
-              btn.disabled = false;
-              e.target.value = "";
-            }
-          }}
-        />
-        <button 
-          className={styles.uploadBtn}
-          onClick={() => document.getElementById("doc-upload").click()}
-        >
-          <UploadIcon />
-          <span>Döküman Yükle</span>
-        </button>
-      </div>
+
     </aside>
   );
 }

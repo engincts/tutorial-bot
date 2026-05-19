@@ -217,6 +217,7 @@ export default function ChatPage({ auth }) {
       {/* ── Sol: Sohbet listesi ── */}
       <ConversationSidebar
         token={token}
+        role={auth.role}
         sessions={sessions}
         activeId={currentSessionId}
         onSelect={handleSelectSession}

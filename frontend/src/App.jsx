@@ -9,6 +9,7 @@ import { supabase } from "./supabase";
 
 export default function App() {
   const [auth, setAuth] = useState(null);
+  const isAdmin = auth?.role === "admin" || auth?.email === "admin@tutorbot.com";
   const [authReady, setAuthReady] = useState(false);
   const [tab, setTab] = useState("chat");
 
@@ -34,12 +35,21 @@ export default function App() {
       });
 
     // Token yenilendiğinde veya oturum değiştiğinde güncelle
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session) {
+        let role = "student";
+        try {
+          const res = await fetch(`/api/profile/${session.user.id}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+          if (res.ok) {
+            const profile = await res.json();
+            role = profile.role || "student";
+          }
+        } catch (e) {}
         setAuth({
           access_token: session.access_token,
           learner_id: session.user.id,
           email: session.user.email,
+          role: role,
         });
       } else {
         setAuth(null);
@@ -110,12 +120,14 @@ export default function App() {
           >
             Quiz
           </button>
-          <button
-            className={`${styles.tab} ${tab === "admin" ? styles.tabActive : ""}`}
-            onClick={() => setTab("admin")}
-          >
-            Yönetim
-          </button>
+          {isAdmin && (
+            <button
+              className={`${styles.tab} ${tab === "admin" ? styles.tabActive : ""}`}
+              onClick={() => setTab("admin")}
+            >
+              Yönetim
+            </button>
+          )}
         </nav>
         <button className={styles.logoutBtn} onClick={handleLogout}>
           Çıkış
@@ -133,9 +145,11 @@ export default function App() {
         <div className={tab === "quiz" ? styles.tabPane : styles.tabPaneHidden}>
           {tab === "quiz" && <QuizPage auth={auth} />}
         </div>
-        <div className={tab === "admin" ? styles.tabPane : styles.tabPaneHidden}>
-          {tab === "admin" && <AdminPage auth={auth} />}
-        </div>
+        {isAdmin && (
+          <div className={tab === "admin" ? styles.tabPane : styles.tabPaneHidden}>
+            {tab === "admin" && <AdminPage auth={auth} />}
+          </div>
+        )}
       </div>
     </div>
   );

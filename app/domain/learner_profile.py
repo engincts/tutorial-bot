@@ -18,6 +18,7 @@ class LearnerProfile:
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     display_name: str = "Öğrenci"
     preferred_language: str = "tr"
+    role: str = "student"
     # Öğrenme tercihleri (LLM tarafından çıkarılır ve güncellenir)
     preferences: dict = field(default_factory=dict)
     created_at: datetime = field(
