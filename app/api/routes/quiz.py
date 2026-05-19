@@ -131,7 +131,7 @@ class BankQuizOut(BaseModel):
 
 
 class BankAnswerRequest(BaseModel):
-    question_id: str
+    question_id: uuid.UUID
     kc_id: str
     selected_answer: str
 
@@ -142,48 +142,44 @@ class BankAnswerOut(BaseModel):
     explanation: str
 
 
+def _derive_subject(kc_id: str) -> str:
+    """
+    kc_id'den quiz'de gösterilecek konu grubunu türetir.
+    tyt_biyoloji_hucre  → tyt_biyoloji
+    coğrafya_türkiye    → coğrafya
+    matematik_turev     → matematik_turev (2 parça, kısa yeterli)
+    """
+    parts = kc_id.split("_")
+    if len(parts) >= 2 and parts[0].lower() in ("tyt", "ayt"):
+        return "_".join(parts[:2])
+    if len(parts) >= 2 and len(parts[0]) > 3:
+        return "_".join(parts[:2])
+    return parts[0]
+
+
 @router.get("/subjects", response_model=list[SubjectOut])
 async def get_available_subjects(
     learner_id: uuid.UUID = Depends(get_current_learner_id),
     db: AsyncSession = Depends(get_session),
 ):
     """
-    Kullanıcının sohbette çalıştığı dersleri (mastery_scores'tan) döner.
-    Her ders için question_bank'ta kaç soru olduğunu ekler.
-    Mastery'si olan dersler önce gelir.
+    Kullanıcının sohbette çalıştığı konuları mastery_scores'tan dinamik olarak döner.
+    kc_id prefix'inden subject türetilir — subject kolonu 'Genel' olsa bile doğru gruplanır.
+    Hiç mastery yoksa question_bank'taki konuları fallback olarak gösterir.
     """
     from sqlalchemy import text
 
-    # Kullanıcının mastery'si olan dersler — subject kolonu memory_updater tarafından set ediliyor
     mastery_rows = await db.execute(
         text("""
-            SELECT subject, avg(p_mastery) AS mastery
+            SELECT kc_id, p_mastery
             FROM mastery_scores
             WHERE learner_id = :lid
-              AND subject IS NOT NULL
-              AND subject NOT IN ('tyt', 'ayt', '')
-            GROUP BY subject
-            ORDER BY mastery DESC
         """).bindparams(lid=learner_id)
     )
-    user_subjects = {r[0]: float(r[1]) for r in mastery_rows.fetchall()}
+    rows = mastery_rows.fetchall()
 
-    # subject kolonu boşsa kc_id'nin ilk segmentini dene
-    if not user_subjects:
-        mastery_rows2 = await db.execute(
-            text("""
-                SELECT split_part(kc_id, '_', 1), avg(p_mastery)
-                FROM mastery_scores
-                WHERE learner_id = :lid
-                  AND split_part(kc_id, '_', 1) NOT IN ('tyt', 'ayt', '')
-                GROUP BY split_part(kc_id, '_', 1)
-                ORDER BY avg(p_mastery) DESC
-            """).bindparams(lid=learner_id)
-        )
-        user_subjects = {r[0]: float(r[1]) for r in mastery_rows2.fetchall()}
-
-    # Eğer kullanıcının hiç mastery'si yoksa question_bank'taki dersleri göster
-    if not user_subjects:
+    if not rows:
+        # Yeni kullanıcı: question_bank'taki konuları göster
         bank_rows = await db.execute(
             text("SELECT kc_id, count(*) FROM question_bank GROUP BY kc_id ORDER BY kc_id")
         )
@@ -197,21 +193,27 @@ async def get_available_subjects(
             for r in bank_rows.fetchall()
         ]
 
+    # kc_id prefix'ine göre grupla
+    groups: dict[str, list[float]] = {}
+    for kc_id, p_mastery in rows:
+        subject = _derive_subject(kc_id)
+        groups.setdefault(subject, []).append(float(p_mastery))
+
     result = []
-    for ders, mastery in user_subjects.items():
+    for subject, masteries in groups.items():
         count_row = await db.execute(
             text("SELECT count(*) FROM question_bank WHERE kc_id ILIKE :pat")
-            .bindparams(pat=f"%{ders}%")
+            .bindparams(pat=f"%{subject}%")
         )
         question_count = int(count_row.scalar() or 0)
         result.append(SubjectOut(
-            kc_id=ders,
-            label=ders.title(),
+            kc_id=subject,
+            label=subject.replace("_", " ").title(),
             question_count=question_count,
-            mastery=round(mastery, 3),
+            mastery=round(sum(masteries) / len(masteries), 3),
         ))
 
-    # Sorusu olmayan dersleri sona at ama yine de göster
+    # Sorusu olanlar önce, sonra mastery'ye göre sırala
     result.sort(key=lambda x: (x.question_count == 0, -(x.mastery or 0)))
     return result
 
@@ -261,8 +263,8 @@ async def submit_bank_answer(
     from sqlalchemy import text
 
     row = await db.execute(
-        text("SELECT correct_answer, explanation FROM question_bank WHERE id = :id")
-        .bindparams(id=req.question_id)
+        text("SELECT correct_answer, explanation FROM question_bank WHERE id = CAST(:id AS UUID)")
+        .bindparams(id=str(req.question_id))
     )
     q = row.first()
     if not q:
@@ -272,6 +274,15 @@ async def submit_bank_answer(
     correct_answer = q[0]
     explanation = q[1] or ""
     is_correct = req.selected_answer.strip() == correct_answer.strip()
+
+    # quiz_answers tablosuna kayıt at
+    from app.infrastructure.quiz_store import QuizAnswerORM
+    db.add(QuizAnswerORM(
+        quiz_id=req.question_id,
+        question_id=req.question_id,
+        learner_answer=req.selected_answer,
+        is_correct=is_correct,
+    ))
 
     # Mastery güncelle (arka planda)
     from app.domain.interaction import Interaction, InteractionType
@@ -285,7 +296,7 @@ async def submit_bank_answer(
     )
     get_memory_updater().fire_and_forget(
         interaction=interaction,
-        new_mastery=None,
+        new_mastery={req.kc_id: 0.85 if is_correct else 0.15},
         subject=req.kc_id.split("_")[0],
     )
 

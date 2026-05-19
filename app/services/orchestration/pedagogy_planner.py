@@ -36,7 +36,7 @@ class PedagogyPlanner:
         """
         components = list(snapshot.components.values())
         if not components:
-            return self._load_prompt("reinforcement")
+            return self._load_prompt("diagnosis")
 
         # Prerequisite check
         if session:

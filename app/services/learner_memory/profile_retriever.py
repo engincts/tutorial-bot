@@ -121,19 +121,25 @@ class ProfileRetriever:
         rows = result.scalars().all()
 
         _EXAM_PREFIXES = frozenset({"tyt", "ayt", "yks", "lgs", "kpss", "ales"})
+        _IGNORE_SUBJECTS = frozenset({"", "genel", "general"})
 
         snapshot = KCMasterySnapshot()
         for row in rows:
             kc_id = row.kc_id
             kc_parts = kc_id.split("_")
-            raw_subject = (row.subject or "").lower()
+            raw_subject = (row.subject or "").lower().strip()
             subj_parts = raw_subject.split("_") if raw_subject else []
 
-            # Strip exam prefix from subject: "tyt_matematik" → "matematik", "tyt" → infer from kc_id
-            if subj_parts and subj_parts[0] in _EXAM_PREFIXES:
+            if raw_subject in _IGNORE_SUBJECTS:
+                # subject kullanışsız — kc_id'den türet
+                if kc_parts and kc_parts[0].lower() in _EXAM_PREFIXES:
+                    real_subj = kc_parts[1] if len(kc_parts) > 1 else kc_parts[0]
+                else:
+                    real_subj = kc_parts[0] if kc_parts else "genel"
+            elif subj_parts and subj_parts[0] in _EXAM_PREFIXES:
+                # "tyt_matematik" → "matematik"
                 real_subj = "_".join(subj_parts[1:])
                 if not real_subj:
-                    # Subject was just "tyt" — use kc_id's non-exam segment
                     if kc_parts[0].lower() in _EXAM_PREFIXES:
                         real_subj = kc_parts[1] if len(kc_parts) > 1 else ""
                     else:

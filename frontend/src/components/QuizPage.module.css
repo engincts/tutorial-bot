@@ -33,12 +33,15 @@
 
 /* ── Konu seçici ──────────────────────────────── */
 .picker {
+  width: 100%;
   max-width: 720px;
   margin: 0 auto;
   padding: 40px 24px;
   display: flex;
   flex-direction: column;
   gap: 24px;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .pickerTitle {

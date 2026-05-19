@@ -160,7 +160,7 @@ class ChatOrchestrator:
         llm_response: LLMResponse = await self._llm.complete(
             messages=messages,
             temperature=0.7,
-            max_tokens=1024,
+            max_tokens=8192,
         )
 
         # ── 8. Session güncelle ───────────────────────────────────────
@@ -329,7 +329,7 @@ class ChatOrchestrator:
 
         # ── 7. LLM streaming ──
         full_content = ""
-        async for token in self._llm.complete_stream(messages=messages, temperature=0.7, max_tokens=1024):
+        async for token in self._llm.complete_stream(messages=messages, temperature=0.7, max_tokens=8192):
             full_content += token
             yield {"type": "token", "content": token}
 

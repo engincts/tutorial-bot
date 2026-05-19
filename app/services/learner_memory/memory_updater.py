@@ -87,30 +87,21 @@ class MemoryUpdater:
                     )
 
                 # 4. KT mastery güncellemeleri
-                # LLM'den gelen skor varsa onu güven skoru olarak kullan,
-                # yoksa mevcut skoru koru (değişiklik yapma)
+                existing = locals().get("current_mastery", {})
                 for kc_id in interaction.kc_tags:
                     llm_score = eval_mastery.get(kc_id)
-                    
+                    old_p = existing.get(kc_id, 0.3)
+
                     if llm_score is not None:
-                        # LLM bir güven skoru verdi — bu skoru kullan
-                        # Ama hala mevcut skorla ağırlıklı ortalama al (kararlılık için)
-                        old_p = 0.3
-                        if 'current_mastery' in locals() and kc_id in current_mastery:
-                            old_p = current_mastery[kc_id]
-                        
-                        # BKT-tarzı yumuşak güncelleme:
-                        # Mevcut skoura yakın kal, LLM skoruna doğru kademeli kayma
-                        # learning_rate düşük tutarak ani sıçramaları engelle
                         learning_rate = 0.2
                         p_mastery = old_p + learning_rate * (llm_score - old_p)
                         p_mastery = max(0.01, min(0.99, p_mastery))
+                    elif kc_id in existing:
+                        # LLM değerlendirmedi ama konu zaten var — olduğu gibi bırak
+                        p_mastery = old_p
                     else:
-                        # LLM değerlendirme yapmadıysa mevcut skoru koru
-                        if 'current_mastery' in locals() and kc_id in current_mastery:
-                            p_mastery = current_mastery[kc_id]
-                        else:
-                            continue  # Hiç veri yoksa güncelleme yapma
+                        # Yeni konu, LLM değerlendirmedi → başlangıç değeriyle kaydet
+                        p_mastery = 0.3
 
                     # Eğer subject_map verilmemişse orchestrator'dan gelen subject'i kullan
                     per_kc_subject = subject

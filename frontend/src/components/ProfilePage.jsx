@@ -121,22 +121,6 @@ export default function ProfilePage({ auth }) {
         </div>
       )}
 
-      {/* ── Export ── */}
-      <div className={styles.exportSection}>
-        <button 
-          className={styles.exportBtn}
-          onClick={() => window.open(`${import.meta.env.VITE_API_URL || ""}/export/mastery/${learnerId}/csv`, "_blank")}
-        >
-          Mastery (CSV)
-        </button>
-        <button 
-          className={styles.exportBtn}
-          onClick={() => window.open(`${import.meta.env.VITE_API_URL || ""}/export/interactions/${learnerId}/csv`, "_blank")}
-        >
-          Geçmiş (CSV)
-        </button>
-      </div>
-
       {/* ── Legend ── */}
       <div className={styles.legend}>
         {LEVELS.map((l) => (
