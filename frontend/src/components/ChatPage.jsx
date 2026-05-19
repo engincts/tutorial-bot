@@ -35,15 +35,24 @@ function profileToMasteryMap(profile) {
  * Chat response'daki mastery_snapshot (kc_id → float) ve mastery_subjects (kc_id → domain)
  * kullanılarak mevcut mastery map'i günceller.
  */
+const _EXAM_PREFIXES = new Set(["tyt", "ayt", "yks", "lgs", "kpss", "ales"]);
+
+function subjectFromKcId(kc_id) {
+  const parts = kc_id.split("_");
+  const segs = _EXAM_PREFIXES.has(parts[0]?.toLowerCase()) ? parts.slice(1) : parts;
+  return (segs[0] || "Genel").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function mergeSnapshotIntoMastery(prev, masterySnapshot, masterySubjects) {
   const next = { ...prev };
   for (const [kc_id, score] of Object.entries(masterySnapshot)) {
     const rawDomain = masterySubjects[kc_id] || "";
-    const subject = rawDomain
-      ? rawDomain.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-      : kc_id.split("_").slice(0, 2).join(" ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const isBlank = !rawDomain || rawDomain.toLowerCase() === "genel";
 
-    // Eğer zaten varsa label'ı koru, yoksa üret
+    const subject = isBlank
+      ? subjectFromKcId(kc_id)
+      : rawDomain.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
     const existingLabel = prev[kc_id]?.label;
     const label = existingLabel || formatLabel(kc_id, rawDomain);
 
@@ -62,11 +71,14 @@ function mergeSnapshotIntoMastery(prev, masterySnapshot, masterySubjects) {
  */
 function formatLabel(kc_id, domain) {
   let slug = kc_id;
-  if (domain && kc_id.startsWith(domain + "_")) {
+  const cleanDomain = (domain || "").toLowerCase().replace(/_/g, "");
+  if (domain && !["genel", ""].includes(cleanDomain) && kc_id.startsWith(domain + "_")) {
     slug = kc_id.slice(domain.length + 1);
   } else {
+    // TYT/AYT/YKS ve ders adı prefix'ini atla
     const parts = kc_id.split("_");
-    slug = parts.length > 2 ? parts.slice(2).join("_") : kc_id;
+    const start = _EXAM_PREFIXES.has(parts[0]?.toLowerCase()) ? 2 : 1;
+    slug = parts.slice(start).join("_") || kc_id;
   }
   return slug.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -90,14 +102,16 @@ export default function ChatPage({ auth }) {
   const inputRef = useRef(null);
 
   // İlk yüklemede profil + sohbet listesini getir
+  // token bağımlılığı kaldırıldı: api.js zaten freshToken() kullanıyor,
+  // token yenilenince effect yeniden tetiklenmemeli (mastery state sıfırlanmasın)
   useEffect(() => {
     listConversations(token).then(setSessions).catch(() => {});
     getProfile(token, learnerId)
       .then((profile) => {
-        if (profile) setMastery(profileToMasteryMap(profile));
+        if (profile) setMastery((prev) => ({ ...prev, ...profileToMasteryMap(profile) }));
       })
       .catch(() => {});
-  }, [token, learnerId]);
+  }, [learnerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -165,14 +179,26 @@ export default function ChatPage({ auth }) {
         },
       ]);
 
-      // Bilgi seviyesi güncellemesi
+      // Bilgi seviyesi güncellemesi — optimistik (snapshot'tan)
       if (data.mastery_snapshot && Object.keys(data.mastery_snapshot).length > 0) {
-        setMastery((prev) =>
-          mergeSnapshotIntoMastery(prev, data.mastery_snapshot, data.mastery_subjects || {})
-        );
-        // Panel kapalıysa otomatik aç (opsiyonel)
-        // setMasteryOpen(true);
+        setMastery((prev) => {
+          const next = mergeSnapshotIntoMastery(prev, data.mastery_snapshot, data.mastery_subjects || {});
+          // İlk mastery verisi geldiğinde paneli otomatik aç
+          if (Object.keys(prev).length === 0 && Object.keys(next).length > 0) {
+            setMasteryOpen(true);
+          }
+          return next;
+        });
       }
+
+      // Worker DB'ye yazdıktan sonra (~10sn) gerçek değerleri çek ve merge et
+      setTimeout(() => {
+        getProfile(token, learnerId)
+          .then((profile) => {
+            if (profile) setMastery((prev) => ({ ...prev, ...profileToMasteryMap(profile) }));
+          })
+          .catch(() => {});
+      }, 10000);
 
       // Oturum listesini güncelle
       setSessions((prev) => {
@@ -302,8 +328,8 @@ export default function ChatPage({ auth }) {
       {masteryOpen && (
         <aside className={styles.masteryAside}>
           <MasteryPanel mastery={mastery} onRefresh={() => {
-            getProfile(token, learnerId).then((profile) => {
-              if (profile) setMastery(profileToMasteryMap(profile));
+            return getProfile(token, learnerId).then((profile) => {
+              if (profile) setMastery((prev) => ({ ...prev, ...profileToMasteryMap(profile) }));
             }).catch(() => {});
           }} />
         </aside>

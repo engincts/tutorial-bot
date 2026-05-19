@@ -64,10 +64,19 @@ function SubjectPicker({ subjects, loading, onStart }) {
             {[5, 10, 15, 20].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
-        <button className={styles.startBtn} disabled={!selected} onClick={() => onStart(selected, count)}>
+        <button
+          className={styles.startBtn}
+          disabled={!selected || selected.question_count === 0}
+          onClick={() => onStart(selected, count)}
+        >
           Başlat
         </button>
       </div>
+      {selected?.question_count === 0 && (
+        <p style={{ textAlign: "center", fontSize: "0.8rem", color: "var(--text-3)", marginTop: 8 }}>
+          Bu konu için soru bankasında henüz soru yok.
+        </p>
+      )}
     </div>
   );
 }

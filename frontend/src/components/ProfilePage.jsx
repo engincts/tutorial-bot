@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getProfile } from "../api";
 import styles from "./ProfilePage.module.css";
 
@@ -70,8 +70,10 @@ export default function ProfilePage({ auth }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openSubjects, setOpenSubjects] = useState({});
+  const retryCount = useRef(0);
 
   useEffect(() => {
+    retryCount.current = 0;
     setLoading(true);
     setError("");
     getProfile(token, learnerId)
@@ -79,6 +81,21 @@ export default function ProfilePage({ auth }) {
       .catch((e) => setError(e.message || "Profil yüklenemedi"))
       .finally(() => setLoading(false));
   }, [token, learnerId]);
+
+  // Mastery boşsa worker henüz yazmamış olabilir — en fazla 2 kez yeniden dene
+  useEffect(() => {
+    if (!profile || retryCount.current >= 2) return;
+    const hasNoMastery = Object.keys(profile.mastery_by_subject || {}).length === 0;
+    if (!hasNoMastery) return;
+    retryCount.current += 1;
+    const delay = retryCount.current * 10000; // 10s, sonra 20s
+    const timer = setTimeout(() => {
+      getProfile(token, learnerId)
+        .then((p) => { if (p) setProfile(p); })
+        .catch(() => {});
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [profile, token, learnerId]);
 
   function toggleSubject(subject) {
     setOpenSubjects((prev) => ({ ...prev, [subject]: !prev[subject] }));

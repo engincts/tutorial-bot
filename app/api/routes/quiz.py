@@ -142,19 +142,23 @@ class BankAnswerOut(BaseModel):
     explanation: str
 
 
-def _derive_subject(kc_id: str) -> str:
-    """
-    kc_id'den quiz'de gösterilecek konu grubunu türetir.
-    tyt_biyoloji_hucre  → tyt_biyoloji
-    coğrafya_türkiye    → coğrafya
-    matematik_turev     → matematik_turev (2 parça, kısa yeterli)
-    """
+_EXAM_PREFIXES = frozenset(["tyt", "ayt", "yks", "lgs", "kpss", "ales"])
+
+
+def _core_subject(kc_id: str) -> str:
+    """kc_id'den sınav prefix'ini atarak çekirdek ders adını döner."""
     parts = kc_id.split("_")
-    if len(parts) >= 2 and parts[0].lower() in ("tyt", "ayt"):
-        return "_".join(parts[:2])
-    if len(parts) >= 2 and len(parts[0]) > 3:
-        return "_".join(parts[:2])
-    return parts[0]
+    if parts and parts[0].lower() in _EXAM_PREFIXES:
+        return parts[1].lower() if len(parts) > 1 else parts[0].lower()
+    return parts[0].lower() if parts else kc_id.lower()
+
+
+def _quiz_label(kc_id: str) -> str:
+    """tyt_felsefe → 'Felsefe', tyt_biyoloji → 'Biyoloji'"""
+    parts = kc_id.split("_")
+    if parts and parts[0].lower() in _EXAM_PREFIXES:
+        parts = parts[1:]
+    return " ".join(p.capitalize() for p in parts)
 
 
 @router.get("/subjects", response_model=list[SubjectOut])
@@ -163,58 +167,61 @@ async def get_available_subjects(
     db: AsyncSession = Depends(get_session),
 ):
     """
-    Kullanıcının sohbette çalıştığı konuları mastery_scores'tan dinamik olarak döner.
-    kc_id prefix'inden subject türetilir — subject kolonu 'Genel' olsa bile doğru gruplanır.
-    Hiç mastery yoksa question_bank'taki konuları fallback olarak gösterir.
+    Hem question_bank'taki hem de yalnızca mastery_scores'taki konuları döndürür.
+    Bankta karşılığı olmayan mastery konuları question_count=0 ile listelenir.
     """
     from sqlalchemy import text
 
-    mastery_rows = await db.execute(
-        text("""
-            SELECT kc_id, p_mastery
-            FROM mastery_scores
-            WHERE learner_id = :lid
-        """).bindparams(lid=learner_id)
+    # 1. Soru bankasındaki konular
+    bank_rows = await db.execute(
+        text("SELECT kc_id, count(*) FROM question_bank GROUP BY kc_id ORDER BY kc_id")
     )
-    rows = mastery_rows.fetchall()
+    bank: dict[str, int] = {row[0]: int(row[1]) for row in bank_rows.fetchall()}
+    bank_core_map: dict[str, str] = {_core_subject(kc): kc for kc in bank}
 
-    if not rows:
-        # Yeni kullanıcı: question_bank'taki konuları göster
-        bank_rows = await db.execute(
-            text("SELECT kc_id, count(*) FROM question_bank GROUP BY kc_id ORDER BY kc_id")
-        )
-        return [
-            SubjectOut(
-                kc_id=r[0],
-                label=r[0].replace("_", " ").title(),
-                question_count=int(r[1]),
-                mastery=None,
-            )
-            for r in bank_rows.fetchall()
-        ]
+    # 2. Kullanıcının mastery verileri
+    mastery_rows = await db.execute(
+        text("SELECT kc_id, p_mastery FROM mastery_scores WHERE learner_id = :lid")
+        .bindparams(lid=learner_id)
+    )
 
-    # kc_id prefix'ine göre grupla
-    groups: dict[str, list[float]] = {}
-    for kc_id, p_mastery in rows:
-        subject = _derive_subject(kc_id)
-        groups.setdefault(subject, []).append(float(p_mastery))
+    bank_groups: dict[str, list[float]] = {}   # bank_kc_id → mastery puanları
+    extra_kcs: dict[str, str] = {}             # core → temsili kc_id (sadece mastery'de olan)
+    extra_groups: dict[str, list[float]] = {}  # core → mastery puanları (sadece mastery'de olan)
 
-    result = []
-    for subject, masteries in groups.items():
-        count_row = await db.execute(
-            text("SELECT count(*) FROM question_bank WHERE kc_id ILIKE :pat")
-            .bindparams(pat=f"%{subject}%")
-        )
-        question_count = int(count_row.scalar() or 0)
+    for kc_id, p_mastery in mastery_rows.fetchall():
+        core = _core_subject(kc_id)
+        bank_kc = bank_core_map.get(core)
+        if bank_kc:
+            bank_groups.setdefault(bank_kc, []).append(float(p_mastery))
+        else:
+            if core not in extra_kcs:
+                extra_kcs[core] = kc_id
+            extra_groups.setdefault(core, []).append(float(p_mastery))
+
+    # 3. Sonuç: bank konuları + sadece mastery'de olanlar (question_count=0)
+    result: list[SubjectOut] = []
+
+    for bank_kc, question_count in bank.items():
+        masteries = bank_groups.get(bank_kc, [])
         result.append(SubjectOut(
-            kc_id=subject,
-            label=subject.replace("_", " ").title(),
+            kc_id=bank_kc,
+            label=_quiz_label(bank_kc),
             question_count=question_count,
-            mastery=round(sum(masteries) / len(masteries), 3),
+            mastery=round(sum(masteries) / len(masteries), 3) if masteries else None,
         ))
 
-    # Sorusu olanlar önce, sonra mastery'ye göre sırala
-    result.sort(key=lambda x: (x.question_count == 0, -(x.mastery or 0)))
+    for core, rep_kc_id in extra_kcs.items():
+        masteries = extra_groups.get(core, [])
+        result.append(SubjectOut(
+            kc_id=rep_kc_id,
+            label=_quiz_label(rep_kc_id),
+            question_count=0,
+            mastery=round(sum(masteries) / len(masteries), 3) if masteries else None,
+        ))
+
+    # Sorusu olanlar önce (mastery yüksekten düşüğe), sorusu olmayanlar sona
+    result.sort(key=lambda x: (x.question_count == 0, x.mastery is None, -(x.mastery or 0)))
     return result
 
 

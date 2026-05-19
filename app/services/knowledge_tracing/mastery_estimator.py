@@ -93,16 +93,13 @@ class MasteryEstimator:
                         break
             
             if subject == "Genel":
-                if course_names:
-                    # Sistemde dersler yüklüyken eşleşme olmadıysa rastgele ders üretme
-                    subject = "Genel"
-                    label = kc_id.replace("_", " ").title()
-                else:
-                    # Sistemde hiç ders yoksa LLM'in ilk kelimesini ders olarak kabul et
-                    parts = kc_id.split("_")
-                    subject = parts[0]
-                    label_parts = parts[1:] if len(parts) > 1 else parts
-                    label = " ".join(label_parts).replace("_", " ").title()
+                # Eşleşme olmasa da kc_id'den ders adı türet
+                _EXAM = frozenset(["tyt", "ayt", "yks", "lgs", "kpss", "ales"])
+                parts = kc_id.split("_")
+                segs = parts[1:] if parts and parts[0].lower() in _EXAM else parts
+                subject = segs[0] if segs else "genel"
+                label_segs = segs[1:] if len(segs) > 1 else segs
+                label = " ".join(label_segs).replace("_", " ").title() or kc_id.title()
             else:
                 label = label_slug.replace("_", " ").title()
 

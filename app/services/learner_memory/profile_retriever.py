@@ -121,33 +121,19 @@ class ProfileRetriever:
         rows = result.scalars().all()
 
         _EXAM_PREFIXES = frozenset({"tyt", "ayt", "yks", "lgs", "kpss", "ales"})
-        _IGNORE_SUBJECTS = frozenset({"", "genel", "general"})
 
         snapshot = KCMasterySnapshot()
         for row in rows:
             kc_id = row.kc_id
             kc_parts = kc_id.split("_")
-            raw_subject = (row.subject or "").lower().strip()
-            subj_parts = raw_subject.split("_") if raw_subject else []
 
-            if raw_subject in _IGNORE_SUBJECTS:
-                # subject kullanışsız — kc_id'den türet
-                if kc_parts and kc_parts[0].lower() in _EXAM_PREFIXES:
-                    real_subj = kc_parts[1] if len(kc_parts) > 1 else kc_parts[0]
-                else:
-                    real_subj = kc_parts[0] if kc_parts else "genel"
-            elif subj_parts and subj_parts[0] in _EXAM_PREFIXES:
-                # "tyt_matematik" → "matematik"
-                real_subj = "_".join(subj_parts[1:])
-                if not real_subj:
-                    if kc_parts[0].lower() in _EXAM_PREFIXES:
-                        real_subj = kc_parts[1] if len(kc_parts) > 1 else ""
-                    else:
-                        real_subj = kc_parts[0]
+            # Saklı subject güvenilmez (tek interaction subject'i tüm KC'lere yazılıyor).
+            # Her zaman kc_id'den türet: tyt_matematik_turev → "matematik"
+            if kc_parts and kc_parts[0].lower() in _EXAM_PREFIXES:
+                domain = kc_parts[1] if len(kc_parts) > 1 else kc_parts[0]
             else:
-                real_subj = raw_subject
-
-            domain = real_subj or "genel"
+                domain = kc_parts[0] if kc_parts else "genel"
+            domain = domain or "genel"
 
             # Build label: strip exam prefix then domain prefix from kc_id segments
             label_segs = kc_parts[:]

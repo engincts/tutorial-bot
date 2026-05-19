@@ -16,6 +16,37 @@ from app.infrastructure.llm.base import BaseLLMClient, Message
 
 logger = logging.getLogger(__name__)
 
+_COURSE_KEYWORDS: dict[str, list[str]] = {
+    "tyt_turkce":    ["türkçe", "turkce", "dilbilgisi", "paragraf", "sözcük", "cümle", "yazım", "noktalama", "edebi", "sözcükte anlam"],
+    "tyt_matematik": ["matematik", "sayı", "cebir", "geometri", "trigonometri", "problem", "denklem", "fonksiyon", "logaritma"],
+    "tyt_fizik":     ["fizik", "kuvvet", "hareket", "enerji", "elektrik", "manyetizma", "optik", "dalga", "newton"],
+    "tyt_kimya":     ["kimya", "atom", "element", "bileşik", "asit", "baz", "reaksiyon", "mol", "periyodik"],
+    "tyt_biyoloji":  ["biyoloji", "hücre", "canlı", "solunum", "sindirim", "dolaşım", "genetik", "evrim", "ekosistem"],
+    "tyt_tarih":     ["tarih", "osmanlı", "cumhuriyet", "atatürk", "savaş", "devlet", "imparatorluk", "inkılap"],
+    "tyt_cografya":  ["coğrafya", "iklim", "harita", "koordinat", "nüfus", "ekonomi", "türkiye", "kıta"],
+    "tyt_felsefe":   ["felsefe", "mantık", "etik", "ahlak", "ontoloji", "epistemoloji", "bilim", "düşünce"],
+}
+
+def _keyword_fallback(text: str, course_names: list[str]) -> list[str]:
+    """Model boş yanıt verirse course_names ve keyword eşleşmesiyle basit KC üretir."""
+    text_lower = text.lower()
+    matched: list[str] = []
+
+    # Önce course_names ile doğrudan prefix eşleşmesi ara
+    for course in (course_names or []):
+        short = course.split("_")[-1]  # "tyt_turkce" → "turkce"
+        if short in text_lower or course in text_lower:
+            matched.append(f"{course}_genel")
+
+    # Sonra keyword map'e bak
+    if not matched:
+        for course_id, keywords in _COURSE_KEYWORDS.items():
+            if any(kw in text_lower for kw in keywords):
+                matched.append(f"{course_id}_genel")
+
+    return matched[:4]
+
+
 _EXTRACTION_SYSTEM = """\
 Görevin: Kullanıcı mesajındaki akademik konuyu JSON array olarak döndürmek.
 
@@ -63,11 +94,17 @@ class KCMapper:
                     Message(role="system", content=system_prompt),
                     Message(role="user", content=f"Metin: {text[:500]}"),
                 ],
-                temperature=0.0,
-                max_tokens=200,
+                temperature=0.1,
+                max_tokens=1000,
             )
             raw = response.content.strip()
-            logger.info("KC Mapper Raw Output: %r", raw)
+            logger.info(
+                "KC Mapper Raw Output: %r | finish=%s in=%d out=%d",
+                raw, response.finish_reason, response.input_tokens, response.output_tokens,
+            )
+            if not raw:
+                logger.warning("KC Mapper: model boş yanıt döndürdü, fallback keyword extraction")
+                return _keyword_fallback(text, course_names or [])
             # JSON array çıkar
             match = re.search(r"\[.*?\]", raw, re.DOTALL)
             if not match:

@@ -87,6 +87,7 @@ class MemoryUpdater:
                     )
 
                 # 4. KT mastery güncellemeleri
+                _EXAM_PREFIXES = frozenset(["tyt", "ayt", "yks", "lgs", "kpss", "ales"])
                 existing = locals().get("current_mastery", {})
                 for kc_id in interaction.kc_tags:
                     llm_score = eval_mastery.get(kc_id)
@@ -97,17 +98,17 @@ class MemoryUpdater:
                         p_mastery = old_p + learning_rate * (llm_score - old_p)
                         p_mastery = max(0.01, min(0.99, p_mastery))
                     elif kc_id in existing:
-                        # LLM değerlendirmedi ama konu zaten var — olduğu gibi bırak
                         p_mastery = old_p
                     else:
-                        # Yeni konu, LLM değerlendirmedi → başlangıç değeriyle kaydet
                         p_mastery = 0.3
 
-                    # Eğer subject_map verilmemişse orchestrator'dan gelen subject'i kullan
-                    per_kc_subject = subject
-                    if not per_kc_subject:
-                        per_kc_subject = kc_id.split("_")[0]
-                        
+                    # Her KC'ye kendi kc_id'sinden türetilen doğru subject yaz
+                    parts = kc_id.split("_")
+                    if parts and parts[0].lower() in _EXAM_PREFIXES:
+                        per_kc_subject = parts[1] if len(parts) > 1 else parts[0]
+                    else:
+                        per_kc_subject = parts[0] if parts else kc_id
+
                     await self._profile_retriever.upsert_kc_mastery(
                         session,
                         learner_id=interaction.learner_id,
