@@ -2,11 +2,9 @@ import { supabase } from "./supabase";
 
 const BASE = "/api";
 
-// Her API çağrısından önce Supabase'den güncel token alır (otomatik refresh)
 async function freshToken() {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session) {
-    // Oturum yoksa veya hata varsa signOut yaparak App.jsx'teki onAuthStateChange'i tetikle
     await supabase.auth.signOut().catch(() => {});
     throw new Error("Oturum sona erdi, lütfen tekrar giriş yapın.");
   }
@@ -20,19 +18,27 @@ function authHeaders(token) {
   };
 }
 
-// Login doğrudan Supabase JS üzerinden — otomatik token refresh devreye girer
 export async function login(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw new Error(error.message || "Giriş başarısız");
+
+  let role = "student";
+  try {
+    const res = await fetch(`${BASE}/profile/${data.user.id}`, { headers: { Authorization: `Bearer ${data.session.access_token}` } });
+    if (res.ok) {
+      const profile = await res.json();
+      role = profile.role || "student";
+    }
+  } catch (e) {}
+
   return {
     access_token: data.session.access_token,
     learner_id: data.user.id,
     email: data.user.email,
+    role: role,
   };
 }
 
-// Register backend üzerinden (admin API — e-posta onayı gerekmez)
-// Backend'den dönen token'larla Supabase oturumu açılır
 export async function register(email, password) {
   const res = await fetch(`${BASE}/auth/register`, {
     method: "POST",
@@ -48,7 +54,17 @@ export async function register(email, password) {
     access_token: data.access_token,
     refresh_token: data.refresh_token,
   });
-  return data;
+
+  let role = "student";
+  try {
+    const pRes = await fetch(`${BASE}/profile/${data.learner_id}`, { headers: { Authorization: `Bearer ${data.access_token}` } });
+    if (pRes.ok) {
+      const profile = await pRes.json();
+      role = profile.role || "student";
+    }
+  } catch (e) {}
+
+  return { ...data, role };
 }
 
 export async function sendChat(_token, _learnerId, sessionId, message) {
@@ -130,39 +146,78 @@ export async function uploadFile(file) {
   return res.json();
 }
 
-
 export const admin = {
   getStats: async () => {
     const token = await freshToken();
-    const res = await fetch(${BASE}/admin/stats, { headers: { Authorization: \Bearer \ } });
+    const res = await fetch(`${BASE}/admin/stats`, { headers: { Authorization: `Bearer ${token}` } });
     return res.json();
   },
   getHallucinationLogs: async () => {
     const token = await freshToken();
-    const res = await fetch(${BASE}/admin/hallucination-logs, { headers: { Authorization: \Bearer \ } });
+    const res = await fetch(`${BASE}/admin/hallucination-logs`, { headers: { Authorization: `Bearer ${token}` } });
     return res.json();
   }
 };
 
 export const quiz = {
-  generateBatch: async (learnerId, kcId, count) => {
+  // Soru bankasından mevcut konular (öğrenci mastery bilgisiyle zenginleştirilmiş)
+  getSubjects: async () => {
     const token = await freshToken();
-    const res = await fetch(${BASE}/quiz/generate-batch, {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify({ learner_id: learnerId, kc_id: kcId, question_count: count })
-    });
+    const res = await fetch(`${BASE}/quiz/subjects`, { headers: authHeaders(token) });
+    if (!res.ok) return [];
     return res.json();
   },
-  submitAnswer: async (learnerId, quizId, questionId, answer) => {
+  // Soru bankasından rastgele sorular
+  getBankQuiz: async (kcId, count = 10) => {
     const token = await freshToken();
-    const res = await fetch(${BASE}/quiz/answer, {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify({ learner_id: learnerId, quiz_id: quizId, question_id: questionId, answer })
-    });
+    const res = await fetch(
+      `${BASE}/quiz/bank-quiz?kc_id=${encodeURIComponent(kcId)}&count=${count}`,
+      { headers: authHeaders(token) }
+    );
+    if (!res.ok) throw new Error("Sorular yüklenemedi.");
     return res.json();
-  }
+  },
+  // Cevap gönder ve doğruluk kontrol et
+  submitBankAnswer: async (questionId, kcId, selectedAnswer) => {
+    const token = await freshToken();
+    const res = await fetch(`${BASE}/quiz/bank-answer`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ question_id: questionId, kc_id: kcId, selected_answer: selectedAnswer }),
+    });
+    if (!res.ok) throw new Error("Cevap gönderilemedi.");
+    return res.json();
+  },
+  // Admin: tek soru ekle
+  ingestQuestion: async (questionData) => {
+    const token = await freshToken();
+    const res = await fetch(`${BASE}/quiz/questions`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(questionData),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Soru eklenemedi");
+    }
+    return res.json();
+  },
+  // Admin: JSON toplu yükle
+  uploadBatch: async (file) => {
+    const token = await freshToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/quiz/questions/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Dosya yüklenemedi");
+    }
+    return res.json();
+  },
 };
 
 export const learner = {

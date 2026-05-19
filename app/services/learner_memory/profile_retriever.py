@@ -29,6 +29,7 @@ class LearnerProfileORM(Base):
     display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     preferred_language: Mapped[str] = mapped_column(Text, server_default="tr")
     preferences: Mapped[str] = mapped_column(Text, server_default="{}")
+    role: Mapped[str] = mapped_column(Text, server_default="student")
     created_at: Mapped[datetime] = mapped_column(server_default=text("NOW()"))
     updated_at: Mapped[datetime] = mapped_column(server_default=text("NOW()"))
 
@@ -75,6 +76,7 @@ class ProfileRetriever:
                 display_name=display_name,
                 preferred_language="tr",
                 preferences="{}",
+                role="student",
             )
             session.add(row)
             await session.flush()
@@ -84,6 +86,7 @@ class ProfileRetriever:
             display_name=row.display_name or display_name,
             preferred_language=row.preferred_language or "tr",
             preferences=json.loads(row.preferences or "{}"),
+            role=row.role or "student",
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -117,19 +120,46 @@ class ProfileRetriever:
         result = await session.execute(stmt)
         rows = result.scalars().all()
 
+        _EXAM_PREFIXES = frozenset({"tyt", "ayt", "yks", "lgs", "kpss", "ales"})
+        _IGNORE_SUBJECTS = frozenset({"", "genel", "general"})
+
         snapshot = KCMasterySnapshot()
         for row in rows:
             kc_id = row.kc_id
-            domain = row.subject or "genel"
-            # Build human-readable label: strip leading domain prefix if present
-            # e.g. "tyt_matematik_turev" with subject "tyt_matematik" → "Turev"
-            if kc_id.startswith(domain + "_"):
-                label_slug = kc_id[len(domain) + 1:]
+            kc_parts = kc_id.split("_")
+            raw_subject = (row.subject or "").lower().strip()
+            subj_parts = raw_subject.split("_") if raw_subject else []
+
+            if raw_subject in _IGNORE_SUBJECTS:
+                # subject kullanışsız — kc_id'den türet
+                if kc_parts and kc_parts[0].lower() in _EXAM_PREFIXES:
+                    real_subj = kc_parts[1] if len(kc_parts) > 1 else kc_parts[0]
+                else:
+                    real_subj = kc_parts[0] if kc_parts else "genel"
+            elif subj_parts and subj_parts[0] in _EXAM_PREFIXES:
+                # "tyt_matematik" → "matematik"
+                real_subj = "_".join(subj_parts[1:])
+                if not real_subj:
+                    if kc_parts[0].lower() in _EXAM_PREFIXES:
+                        real_subj = kc_parts[1] if len(kc_parts) > 1 else ""
+                    else:
+                        real_subj = kc_parts[0]
             else:
-                # Fallback: drop first two segments for "prefix_domain_topic" patterns
-                parts = kc_id.split("_")
-                label_slug = "_".join(parts[2:]) if len(parts) > 2 else kc_id
-            label = label_slug.replace("_", " ").title() if label_slug else kc_id.replace("_", " ").title()
+                real_subj = raw_subject
+
+            domain = real_subj or "genel"
+
+            # Build label: strip exam prefix then domain prefix from kc_id segments
+            label_segs = kc_parts[:]
+            if label_segs and label_segs[0].lower() in _EXAM_PREFIXES:
+                label_segs = label_segs[1:]
+            if label_segs and label_segs[0].lower() == domain.lower():
+                label_segs = label_segs[1:]
+
+            label_slug = " ".join(label_segs) if label_segs else domain
+            label = " ".join(
+                [p.upper() if p.lower() in _EXAM_PREFIXES else p.capitalize() for p in label_slug.split()]
+            )
             snapshot.upsert(
                 KnowledgeComponent(
                     kc_id=kc_id,

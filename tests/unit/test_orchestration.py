@@ -33,9 +33,9 @@ class TestPedagogyPlanner:
     @pytest.fixture
     def planner(self, tmp_path):
         # Geçici prompts klasörü oluştur
-        (tmp_path / "reinforcement.md").write_text("# Pekiştirme")
-        (tmp_path / "practice.md").write_text("# Pratik")
-        (tmp_path / "challenge.md").write_text("# Zorlayıcı")
+        (tmp_path / "reinforcement.md").write_text("# Pekiştirme", encoding="utf-8")
+        (tmp_path / "practice.md").write_text("# Pratik", encoding="utf-8")
+        (tmp_path / "challenge.md").write_text("# Zorlayıcı", encoding="utf-8")
         return PedagogyPlanner(settings=make_settings(), prompts_dir=str(tmp_path))
 
     def _snap(self, p_mastery: float, attempts: int = 1) -> KCMasterySnapshot:
@@ -43,20 +43,24 @@ class TestPedagogyPlanner:
         snap.upsert(KnowledgeComponent("kc1", "KÇ1", p_mastery=p_mastery, attempts=attempts))
         return snap
 
-    def test_low_mastery_returns_reinforcement(self, planner):
-        strategy = planner.select_strategy(self._snap(0.2))
+    @pytest.mark.asyncio
+    async def test_low_mastery_returns_reinforcement(self, planner):
+        strategy = await planner.select_strategy(self._snap(0.2))
         assert "Pekiştirme" in strategy
 
-    def test_mid_mastery_returns_practice(self, planner):
-        strategy = planner.select_strategy(self._snap(0.55))
+    @pytest.mark.asyncio
+    async def test_mid_mastery_returns_practice(self, planner):
+        strategy = await planner.select_strategy(self._snap(0.55))
         assert "Pratik" in strategy
 
-    def test_high_mastery_returns_challenge(self, planner):
-        strategy = planner.select_strategy(self._snap(0.85))
+    @pytest.mark.asyncio
+    async def test_high_mastery_returns_challenge(self, planner):
+        strategy = await planner.select_strategy(self._snap(0.85))
         assert "Zorlayıcı" in strategy
 
-    def test_empty_snapshot_returns_reinforcement(self, planner):
-        strategy = planner.select_strategy(KCMasterySnapshot())
+    @pytest.mark.asyncio
+    async def test_empty_snapshot_returns_reinforcement(self, planner):
+        strategy = await planner.select_strategy(KCMasterySnapshot())
         assert "Pekiştirme" in strategy
 
     def test_mastery_level_for(self, planner):
@@ -70,12 +74,13 @@ class TestPedagogyPlanner:
 class TestPromptBuilder:
     @pytest.fixture
     def builder(self, tmp_path):
-        (tmp_path / "system_base.md").write_text("# Sistem Direktifi")
+        (tmp_path / "system_base.md").write_text("# Sistem Direktifi", encoding="utf-8")
         return PromptBuilder(prompts_dir=str(tmp_path))
 
-    def test_builds_messages_list(self, builder):
+    @pytest.mark.asyncio
+    async def test_builds_messages_list(self, builder):
         from app.domain.interaction import Misconception
-        messages = builder.build(
+        messages = await builder.build(
             user_query="Türev nedir?",
             profile=LearnerProfile(display_name="Ali"),
             mastery_snapshot=KCMasterySnapshot(),
@@ -90,9 +95,10 @@ class TestPromptBuilder:
         assert messages[-1].role == "user"
         assert messages[-1].content == "Türev nedir?"
 
-    def test_system_contains_profile(self, builder):
+    @pytest.mark.asyncio
+    async def test_system_contains_profile(self, builder):
         from app.domain.interaction import Misconception
-        messages = builder.build(
+        messages = await builder.build(
             user_query="Soru",
             profile=LearnerProfile(display_name="Zeynep"),
             mastery_snapshot=KCMasterySnapshot(),
@@ -104,12 +110,13 @@ class TestPromptBuilder:
         )
         assert "Zeynep" in messages[0].content
 
-    def test_conversation_history_injected(self, builder):
+    @pytest.mark.asyncio
+    async def test_conversation_history_injected(self, builder):
         history = [
             {"role": "user", "content": "Önceki soru"},
             {"role": "assistant", "content": "Önceki cevap"},
         ]
-        messages = builder.build(
+        messages = await builder.build(
             user_query="Yeni soru",
             profile=LearnerProfile(),
             mastery_snapshot=KCMasterySnapshot(),
@@ -123,14 +130,15 @@ class TestPromptBuilder:
         assert roles.count("user") == 2
         assert roles.count("assistant") == 1
 
-    def test_misconceptions_in_system(self, builder):
+    @pytest.mark.asyncio
+    async def test_misconceptions_in_system(self, builder):
         from app.domain.interaction import Misconception
         misc = Misconception(
             learner_id=uuid.uuid4(),
             kc_id="algebra",
             description="Negatif sayıları karıştırıyor",
         )
-        messages = builder.build(
+        messages = await builder.build(
             user_query="Soru",
             profile=LearnerProfile(),
             mastery_snapshot=KCMasterySnapshot(),

@@ -67,6 +67,14 @@ alembic upgrade head
 python scripts/seed_curriculum.py
 ```
 
+### Yönetici (Admin) Erişimi
+
+Sistemin yönetim paneline ve kazanım soruları ekleme bölümüne (Swagger UI) erişmek için yetkili hesapla giriş yapmanız gerekir:
+- **E-posta:** `admin@tutorbot.com`
+- **Şifre:** 123456
+
+*(Unutmamak için: Eğer bu hesap Supabase'de yoksa, uygulamanın Kayıt Ol ekranından `admin@tutorbot.com` e-postasıyla yeni bir hesap açmanız yeterlidir.)*
+
 ## 🔌 API Endpoint'leri
 
 | Grup | Method | Path | Açıklama |

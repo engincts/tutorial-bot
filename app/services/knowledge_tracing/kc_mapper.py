@@ -17,23 +17,26 @@ from app.infrastructure.llm.base import BaseLLMClient, Message
 logger = logging.getLogger(__name__)
 
 _EXTRACTION_SYSTEM = """\
-Sen bir eğitim içeriği analistinin yardımcısı olarak çalışıyorsun.
-Kullanıcının sorusunda geçen akademik konuları veya kavramları tespit edip standart formata çevirmelisin.
-SADECE geçerli bir JSON array döndür, markdown veya başka açıklama ekleme.
+Görevin: Kullanıcı mesajındaki akademik konuyu JSON array olarak döndürmek.
 
-KC ID formatı: {ders}_{konu}_{kavram} — üç katmanlı, küçük harf İngilizce karakterler, kelimeler arası alt çizgi.
-- ders: matematik, fizik, kimya, biyoloji, turkce, tarih vb.
-- konu: turev, integral, kuvvet, asit_baz, hucre, denklem vb.
-- kavram: temel, tanim, zincir_kurali, formuller, problem vb.
+ÇIKTI KURALI: Yanıtın yalnızca bir JSON array olacak. Başka hiçbir şey yazma. Açıklama yok, markdown yok, kod bloğu yok.
 
-Eğer sistemde şu dersler varsa, öncelikle onları kullan: {course_names}
+KC ID formatı: {ders}_{konu}_{kavram}
+- Küçük harf, Türkçe karakter yok (ü→u, ş→s, ğ→g, ç→c, ı→i, ö→o), kelimeler arası alt çizgi
+- ders örnekleri: matematik, fizik, kimya, biyoloji, turkce, tarih, cografya, felsefe
+- konu örnekleri: turev, integral, kuvvet, asit_baz, hucre, sozcuk_turleri, osmanlı_tarihi
+- kavram örnekleri: tanim, uygulama, zincir_kurali, sifat, zarf, isim_fiil
+
+Sistemde yüklü dersler (varsa bunları ön planda tut): {course_names}
 
 Örnekler:
-- "Türev nedir?"     -> ["matematik_turev_tanim"]
-- "Eğim nasıl bulunur?" -> ["matematik_turev_egim", "matematik_analitik_geometri"]
-- "Newton'un 2. yasası"  -> ["fizik_kuvvet_newton_2_kanun"]
+- "Türev nedir?" → ["matematik_turev_tanim"]
+- "sessiz kelimesi sıfat mı zarf mı?" → ["turkce_sozcuk_turleri_sifat_zarf"]
+- "isim fiil nedir?" → ["turkce_fiilimsi_isim_fiil"]
+- "Newton'un 2. yasası" → ["fizik_kuvvet_newton_2_kanun"]
+- "merhaba nasılsın" → []
 
-Soru çok kısa olsa bile, hangi konuyla ilgiliyse ona uygun en az bir etiket üret. Gerçekten hiçbir akademik kavram yoksa (örn: "merhaba", "nasılsın") boş array döndür: []
+Akademik konu varsa mutlaka en az bir etiket üret.
 """
 
 
@@ -61,7 +64,7 @@ class KCMapper:
                     Message(role="user", content=f"Metin: {text[:500]}"),
                 ],
                 temperature=0.0,
-                max_tokens=100,
+                max_tokens=200,
             )
             raw = response.content.strip()
             logger.info("KC Mapper Raw Output: %r", raw)

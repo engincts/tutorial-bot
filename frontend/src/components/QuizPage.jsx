@@ -1,162 +1,246 @@
 import { useState, useEffect } from "react";
-import api from "../api";
-import styles from "./ChatPage.module.css"; // Reuse chat layout or similar
+import { quiz } from "../api";
+import styles from "./QuizPage.module.css";
 
-export default function QuizPage({ auth }) {
-  const [kcList, setKcList] = useState([]);
-  const [selectedKc, setSelectedKc] = useState("");
-  const [quiz, setQuiz] = useState(null);
-  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState(null);
-  const [completed, setCompleted] = useState(false);
+const LEVEL_COLORS = { low: "#ef4444", mid: "#f59e0b", high: "#22c55e" };
 
-  useEffect(() => {
-    // Profil sayfasından mevcut KC'leri alabiliriz veya sabit bir liste
-    async function loadKcs() {
-      try {
-        const profile = await api.learner.getProfile(auth.learner_id, auth.access_token);
-        setKcList(Object.keys(profile.mastery_snapshot || {}));
-      } catch (err) {
-        console.error("KC list load failed", err);
-      }
-    }
-    loadKcs();
-  }, [auth]);
+function masteryColor(m) {
+  if (m == null) return "var(--text-3)";
+  if (m < 0.4) return LEVEL_COLORS.low;
+  if (m < 0.7) return LEVEL_COLORS.mid;
+  return LEVEL_COLORS.high;
+}
 
-  async function startQuiz() {
-    if (!selectedKc) return;
-    setLoading(true);
-    try {
-      const data = await api.quiz.generateBatch(auth.learner_id, selectedKc, 5, auth.access_token);
-      setQuiz(data);
-      setCurrentQuestionIdx(0);
-      setCompleted(false);
-      setFeedback(null);
-    } catch (err) {
-      alert("Quiz başlatılamadı.");
-    } finally {
-      setLoading(false);
-    }
-  }
+// ── Konu seçim ────────────────────────────────────────────────
+function SubjectPicker({ subjects, loading, onStart }) {
+  const [selected, setSelected] = useState(null);
+  const [count, setCount] = useState(10);
 
-  async function submitAnswer(answer) {
-    if (feedback) return;
-    setLoading(true);
-    try {
-      const question = quiz.questions[currentQuestionIdx];
-      const result = await api.quiz.submitAnswer(
-        auth.learner_id,
-        quiz.quiz_id,
-        question.question_id,
-        answer,
-        auth.access_token
-      );
-      setFeedback(result);
-    } catch (err) {
-      alert("Cevap gönderilemedi.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  if (loading) return <div className={styles.center}><p>Konular yükleniyor...</p></div>;
 
-  function nextQuestion() {
-    setFeedback(null);
-    if (currentQuestionIdx + 1 < quiz.questions.length) {
-      setCurrentQuestionIdx(idx => idx + 1);
-    } else {
-      setCompleted(true);
-    }
-  }
-
-  if (!quiz) {
+  if (!subjects.length) {
     return (
-      <div style={{ padding: 40, textAlign: "center" }}>
-        <h2>Adaptif Quiz Başlat</h2>
-        <p style={{ color: "var(--text-3)", marginBottom: 24 }}>Bir konu seçin ve kendinizi test edin.</p>
-        <select 
-          value={selectedKc} 
-          onChange={e => setSelectedKc(e.target.value)}
-          style={{ padding: 12, borderRadius: 8, marginRight: 8, width: 250 }}
-        >
-          <option value="">Konu Seçin...</option>
-          {kcList.map(kc => <option key={kc} value={kc}>{kc}</option>)}
-        </select>
-        <button 
-          onClick={startQuiz} 
-          disabled={!selectedKc || loading}
-          style={{ padding: "12px 24px", borderRadius: 8, backgroundColor: "var(--primary)", color: "white" }}
-        >
-          {loading ? "Hazırlanıyor..." : "Başlat"}
-        </button>
+      <div className={styles.center}>
+        <p className={styles.empty}>Soru bankası henüz boş.</p>
+        <p className={styles.emptySub}>
+          ingest_question_bank.py ile TYT PDF'lerini yükleyin.
+        </p>
       </div>
     );
   }
-
-  if (completed) {
-    return (
-      <div style={{ padding: 40, textAlign: "center" }}>
-        <h2>Quiz Tamamlandı!</h2>
-        <p style={{ fontSize: 18, margin: "24px 0" }}>Tebrikler, tüm soruları yanıtladınız.</p>
-        <button onClick={() => setQuiz(null)} style={{ padding: "12px 24px", borderRadius: 8, backgroundColor: "var(--primary)", color: "white" }}>
-          Yeni Quiz
-        </button>
-      </div>
-    );
-  }
-
-  const question = quiz.questions[currentQuestionIdx];
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: 40 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
-        <span>Soru {currentQuestionIdx + 1} / {quiz.questions.length}</span>
-        <span>Konu: {selectedKc}</span>
+    <div className={styles.picker}>
+      <h2 className={styles.pickerTitle}>Quiz Başlat</h2>
+      <p className={styles.pickerSub}>Konu seç, soru bankasından test gel.</p>
+
+      <div className={styles.subjectGrid}>
+        {subjects.map((s) => (
+          <button
+            key={s.kc_id}
+            className={`${styles.subjectCard} ${selected?.kc_id === s.kc_id ? styles.selected : ""}`}
+            onClick={() => setSelected(s)}
+          >
+            <span className={styles.subjectLabel}>{s.label}</span>
+            <span className={styles.subjectCount}>{s.question_count} soru</span>
+            {s.mastery != null ? (
+              <span
+                className={styles.masteryBadge}
+                style={{ background: masteryColor(s.mastery) + "22", color: masteryColor(s.mastery) }}
+              >
+                %{Math.round(s.mastery * 100)} hakimiyet
+              </span>
+            ) : (
+              <span className={styles.newBadge}>Yeni konu</span>
+            )}
+          </button>
+        ))}
       </div>
 
-      <div style={{ padding: 32, backgroundColor: "var(--bg-2)", borderRadius: 16, border: "1px solid var(--border)", marginBottom: 24 }}>
-        <h3 style={{ marginBottom: 24, lineHeight: 1.5 }}>{question.question_text}</h3>
-        <div style={{ display: "grid", gap: 12 }}>
-          {question.options.map((opt, i) => (
-            <button
-              key={i}
-              onClick={() => submitAnswer(opt)}
-              disabled={!!feedback || loading}
-              style={{
-                padding: 16,
-                textAlign: "left",
-                borderRadius: 8,
-                border: "1px solid var(--border)",
-                backgroundColor: feedback ? (opt === feedback.correct_answer ? "rgba(0,255,0,0.1)" : "transparent") : "var(--bg-1)",
-                cursor: feedback ? "default" : "pointer"
-              }}
-            >
-              {opt}
-            </button>
-          ))}
+      <div className={styles.controls}>
+        <label className={styles.countLabel}>
+          Soru sayısı:
+          <select className={styles.countSelect} value={count} onChange={(e) => setCount(Number(e.target.value))}>
+            {[5, 10, 15, 20].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <button className={styles.startBtn} disabled={!selected} onClick={() => onStart(selected, count)}>
+          Başlat
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Quiz oyunu ────────────────────────────────────────────────
+function QuizGame({ kcId, questions, onFinish }) {
+  const [idx, setIdx] = useState(0);
+  const [feedback, setFeedback] = useState(null);
+  const [score, setScore] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  const q = questions[idx];
+  const total = questions.length;
+
+  async function handleAnswer(opt) {
+    if (feedback || loading) return;
+    setLoading(true);
+    try {
+      const res = await quiz.submitBankAnswer(q.question_id, kcId, opt);
+      setFeedback({ ...res, selected: opt });
+      if (res.is_correct) setScore((s) => s + 1);
+    } catch {
+      setFeedback({ is_correct: false, correct_answer: "?", explanation: "Cevap gönderilemedi.", selected: opt });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function next() {
+    if (idx + 1 >= total) {
+      onFinish(score + (feedback?.is_correct ? 1 : 0), total);
+      return;
+    }
+    setFeedback(null);
+    setIdx((i) => i + 1);
+  }
+
+  function optStyle(opt) {
+    if (!feedback) return {};
+    if (opt === feedback.correct_answer) return { background: "#22c55e22", borderColor: "#22c55e" };
+    if (opt === feedback.selected && opt !== feedback.correct_answer) return { background: "#ef444422", borderColor: "#ef4444" };
+    return { opacity: 0.5 };
+  }
+
+  return (
+    <div className={styles.game}>
+      <div className={styles.progress}>
+        <div className={styles.progressBar}>
+          <div className={styles.progressFill} style={{ width: `${(idx / total) * 100}%` }} />
         </div>
+        <span className={styles.progressText}>{idx + 1} / {total}</span>
+        <span className={styles.scoreText}>✓ {score}</span>
+      </div>
+
+      <div className={styles.questionBox}>
+        <p className={styles.questionText}>{q.question_text}</p>
+      </div>
+
+      <div className={styles.options}>
+        {q.options.map((opt, i) => (
+          <button
+            key={i}
+            className={styles.option}
+            style={optStyle(opt)}
+            disabled={!!feedback || loading}
+            onClick={() => handleAnswer(opt)}
+          >
+            {opt}
+          </button>
+        ))}
       </div>
 
       {feedback && (
-        <div style={{ 
-          padding: 24, 
-          borderRadius: 12, 
-          backgroundColor: feedback.is_correct ? "rgba(0,255,0,0.05)" : "rgba(255,0,0,0.05)",
-          border: `1px solid ${feedback.is_correct ? "var(--green)" : "var(--red)"}`
-        }}>
-          <h4 style={{ color: feedback.is_correct ? "var(--green)" : "var(--red)", marginBottom: 8 }}>
-            {feedback.is_correct ? "✅ Doğru!" : "❌ Yanlış"}
-          </h4>
-          {!feedback.is_correct && <p><strong>Doğru Cevap:</strong> {feedback.correct_answer}</p>}
-          <p style={{ marginTop: 8 }}>{feedback.explanation}</p>
-          <button 
-            onClick={nextQuestion} 
-            style={{ marginTop: 16, padding: "8px 16px", borderRadius: 6, backgroundColor: "var(--primary)", color: "white" }}
-          >
-            Sonraki Soru
+        <div className={`${styles.feedback} ${feedback.is_correct ? styles.correct : styles.wrong}`}>
+          <strong>{feedback.is_correct ? "✓ Doğru!" : "✗ Yanlış"}</strong>
+          {!feedback.is_correct && <span> — Doğru cevap: <strong>{feedback.correct_answer}</strong></span>}
+          {feedback.explanation && <p className={styles.explanation}>{feedback.explanation}</p>}
+          <button className={styles.nextBtn} onClick={next}>
+            {idx + 1 >= total ? "Sonuçları Gör" : "Sonraki →"}
           </button>
         </div>
       )}
     </div>
+  );
+}
+
+// ── Sonuç ekranı ──────────────────────────────────────────────
+function ResultScreen({ score, total, label, onRetry, onBack }) {
+  const pct = Math.round((score / total) * 100);
+  const color = pct >= 70 ? LEVEL_COLORS.high : pct >= 40 ? LEVEL_COLORS.mid : LEVEL_COLORS.low;
+  return (
+    <div className={styles.result}>
+      <div className={styles.resultScore} style={{ color }}>%{pct}</div>
+      <p className={styles.resultSub}>{score} / {total} doğru — {label}</p>
+      <div className={styles.resultActions}>
+        <button className={styles.retryBtn} onClick={onRetry}>Tekrar Dene</button>
+        <button className={styles.backBtn} onClick={onBack}>Konu Seç</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Ana bileşen ───────────────────────────────────────────────
+export default function QuizPage({ auth }) {
+  const [subjects, setSubjects] = useState([]);
+  const [loadingSubjects, setLoadingSubjects] = useState(true);
+  const [loadingQuiz, setLoadingQuiz] = useState(false);
+  const [activeQuiz, setActiveQuiz] = useState(null); // { kcId, label, questions }
+  const [result, setResult] = useState(null);
+  const [lastSubject, setLastSubject] = useState(null);
+  const [lastCount, setLastCount] = useState(10);
+
+  useEffect(() => {
+    quiz.getSubjects()
+      .then(setSubjects)
+      .catch(() => setSubjects([]))
+      .finally(() => setLoadingSubjects(false));
+  }, []);
+
+  async function handleStart(subject, count) {
+    setLastSubject(subject);
+    setLastCount(count);
+    setLoadingQuiz(true);
+    try {
+      const data = await quiz.getBankQuiz(subject.kc_id, count);
+      setActiveQuiz({ kcId: data.kc_id, label: subject.label, questions: data.questions });
+      setResult(null);
+    } catch (err) {
+      alert(err.message || "Sorular yüklenemedi.");
+    } finally {
+      setLoadingQuiz(false);
+    }
+  }
+
+  function handleFinish(score, total) {
+    setResult({ score, total, label: activeQuiz.label });
+    setActiveQuiz(null);
+  }
+
+  if (loadingQuiz) {
+    return (
+      <div className={styles.center}>
+        <div className={styles.spinner} />
+        <p style={{ marginTop: 16, color: "var(--text-2)" }}>Sorular yükleniyor...</p>
+      </div>
+    );
+  }
+
+  if (result) {
+    return (
+      <ResultScreen
+        {...result}
+        onRetry={() => { setResult(null); if (lastSubject) handleStart(lastSubject, lastCount); }}
+        onBack={() => setResult(null)}
+      />
+    );
+  }
+
+  if (activeQuiz) {
+    return (
+      <QuizGame
+        kcId={activeQuiz.kcId}
+        questions={activeQuiz.questions}
+        onFinish={handleFinish}
+      />
+    );
+  }
+
+  return (
+    <SubjectPicker
+      subjects={subjects}
+      loading={loadingSubjects}
+      onStart={handleStart}
+    />
   );
 }

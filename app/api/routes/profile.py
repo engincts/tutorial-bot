@@ -27,13 +27,25 @@ class ProfileOut(BaseModel):
     learner_id: uuid.UUID
     display_name: str | None = "Öğrenci"
     preferred_language: str | None = "tr"
+    role: str = "student"
     preferences: dict | None = {}
     mastery_by_subject: dict[str, list[KCMasteryOut]] = {}
 
 
 def _format_subject(raw: str) -> str:
     """'tyt_matematik' → 'TYT Matematik'"""
-    return raw.replace("_", " ").title()
+    if not raw:
+        return "Genel"
+    acronyms = {"tyt", "ayt", "yks", "lgs", "kpss", "ales"}
+    parts = raw.replace("_", " ").split()
+    formatted = []
+    for p in parts:
+        if p.lower() in acronyms:
+            formatted.append(p.upper())
+        else:
+            # Handle Turkish chars correctly by just capitalizing the first letter
+            formatted.append(p.capitalize())
+    return " ".join(formatted)
 
 
 @router.get("/{learner_id}", response_model=ProfileOut)
@@ -61,6 +73,7 @@ async def get_profile(
         learner_id=profile.id,
         display_name=profile.display_name,
         preferred_language=profile.preferred_language,
+        role=profile.role,
         preferences=profile.preferences,
         mastery_by_subject=dict(grouped),
     )
