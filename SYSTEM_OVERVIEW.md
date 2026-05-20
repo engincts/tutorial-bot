@@ -123,20 +123,24 @@ RAG için PDF kaynaklı bölünmüş ders içerikleri.
 
 ---
 
-### 3.5 `learner_interactions`
-Tüm etkileşim geçmişi — semantik hafıza için vektör olarak saklanır.
+### 3.5 `chat_history`
+Tüm etkileşim geçmişi — semantik hafıza (Memory RAG) için vektör olarak saklanır.  
+Worker her chat yanıtından sonra buraya yazar; bir sonraki requestte cosine similarity ile top-3 okunur.
 
 | Kolon | Tür | Açıklama |
 |---|---|---|
 | `id` | UUID PK | Etkileşim ID |
-| `learner_id` | UUID | Öğrenci |
+| `learner_id` | UUID | Öğrenci (WHERE filtresi — başkasının hafızası karışmaz) |
 | `session_id` | UUID | Oturum |
-| `interaction_type` | TEXT | "question", "explanation_given", "misconception", "success", "struggle", "reflection" |
-| `content_summary` | TEXT | Özet metin |
-| `embedding` | VECTOR(1024) | Semantik arama vektörü |
-| `kc_tags` | TEXT[] | İlgili konular |
+| `interaction_type` | TEXT | "question" / "misconception" / "success" / "struggle" / "reflection" |
+| `content_summary` | TEXT | Özet metin — `"S: {soru[:500]}\nY: {yanıt[:1500]}"` formatında (max ~2000 karakter) |
+| `embedding` | VECTOR(1024) | BGE-M3 vektörü — cosine similarity araması için |
+| `kc_tags` | TEXT[] | İlgili konu kodları |
 | `correctness` | BOOL | Doğru/Yanlış (quiz için) |
-| `created_at` | TIMESTAMP | Zaman |
+| `created_at` | TIMESTAMPTZ | Zaman |
+
+> **Memory RAG kaynağı:** `config.json → retrieval.memory_top_k: 3`  
+> Her requestte `search_learner_memory(top_k=3)` → `chat_history WHERE learner_id=:id ORDER BY embedding <=> query LIMIT 3`
 
 ---
 
@@ -155,15 +159,44 @@ LLM tarafından tespit edilen yanılgılar.
 ---
 
 ### 3.7 `quiz_sessions`
-LLM ile dinamik üretilen quiz oturumları.
+Her quiz oturumu kaydı. Hem soru bankası quizi (`GET /quiz/bank-quiz`) hem LLM adaptif quiz (`POST /quiz/generate-adaptive`) tarafından oluşturulur.
 
 | Kolon | Tür | Açıklama |
 |---|---|---|
 | `id` | UUID PK | Oturum |
 | `learner_id` | UUID | Öğrenci |
-| `kc_id` | TEXT | Konu |
-| `score` | FLOAT | Puan |
-| `status` | TEXT | "active" / "completed" |
+| `kc_id` | VARCHAR(255) | Konu kodu |
+| `score` | FLOAT | Kümülatif puan (% doğru) |
+| `status` | TEXT | "active" / "in_progress" / "completed" |
+| `created_at` | TIMESTAMPTZ | Başlangıç zamanı |
+
+---
+
+### 3.8 `quiz_questions`
+LLM adaptif quiz ile üretilen sorular. Soru bankasından gelen statik sorular buraya değil `question_bank`'a gider.
+
+| Kolon | Tür | Açıklama |
+|---|---|---|
+| `id` | UUID PK | Soru ID |
+| `quiz_id` | UUID | Bağlı quiz oturumu |
+| `question_text` | TEXT | Soru metni |
+| `options` | TEXT (JSON) | `["A) ...", "B) ..."]` |
+| `correct_answer` | TEXT | Doğru şık |
+| `explanation` | TEXT | Açıklama |
+
+---
+
+### 3.9 `quiz_answers`
+Öğrencinin quiz cevapları. Hem banka hem LLM quiz cevaplarını saklar.
+
+| Kolon | Tür | Açıklama |
+|---|---|---|
+| `id` | UUID PK | Cevap ID |
+| `quiz_id` | UUID | Bağlı quiz oturumu |
+| `question_id` | UUID | Sorunun ID'si |
+| `learner_answer` | TEXT | Öğrencinin seçtiği şık |
+| `is_correct` | BOOL | Doğru mu? |
+| `answered_at` | TIMESTAMPTZ | Cevap zamanı |
 
 ---
 
@@ -251,7 +284,7 @@ Redis'ten iş al
       ▼
 [a] Etkileşimi embed et
     content_summary → BGE-M3 → 1024-boyutlu vektör
-    learner_interactions tablosuna yaz
+    chat_history tablosuna yaz
 
 [b] Yanılgıları kaydet
     student_errors tablosuna INSERT
@@ -943,16 +976,16 @@ ve `to_prompt_context()` boş string döner — LLM kendi genel bilgisiyle devam
 
 ### 13.4 Hafıza Yazma Akışı (Write Path)
 
-Her chat yanıtından sonra `fire_and_forget()` ile arka planda tetiklenir — kullanıcıyı bekletmez.
+Her chat yanıtından sonra Redis kuyruğuna atılır, worker arka planda işler — kullanıcıyı bekletmez.
 
 ```
 LLM yanıtı kullanıcıya döner
         ↓
-asyncio.create_task(memory_updater.update())   ← ana thread'i bloklamaz
+Redis kuyruğuna push (fire-and-forget):
+  content_summary = "S: {kullanıcı sorusu[:500]}\nY: {LLM yanıtı[:1500]}"
         ↓
-InteractionLogger.log()
-  content_summary = mesaj özeti (max 300 karakter)
-  embed_text      → BGE-M3 → 1024d vektör
+Worker → InteractionLogger.log()
+  content_summary embed edilir → BGE-M3 → 1024d vektör
         ↓
 chat_history tablosuna INSERT:
   { learner_id, session_id, interaction_type,
@@ -966,6 +999,10 @@ aynı transaction içinde:
         ↓
 session.commit()
 ```
+
+> **Neden soru+yanıt birlikte?**  
+> Memory RAG sadece "öğrenci ne sormuş?" değil, "asistan o konuyu nasıl açıklamış?" bilgisini de döndürür.  
+> LLM daha önce verdiği açıklamayı tekrarlamamak veya üzerine inşa etmek için bu bağlamı kullanır.
 
 **`interaction_type` değerleri:**
 ```
@@ -1032,66 +1069,62 @@ LIMIT 3
 
 ### 14.1 Soru Bankası Araması — `GET /api/quiz/subjects`
 
-Kullanıcıya gösterilecek konu listesini oluşturur.
+Kullanıcıya gösterilecek konu listesini oluşturur. **Bank-first yaklaşım:** `question_bank` kaynak gerçek, mastery verileri üzerine eşlenir.
 
-#### Mevcut Öğrenci (mastery_scores kaydı var)
-
-```sql
-SELECT kc_id, p_mastery
-FROM mastery_scores
-WHERE learner_id = :learner_id
-```
-
-Gelen kc_id'ler prefix kuralıyla gruplandırılır:
+#### Algoritma
 
 ```
-kc_id prefix kuralı (_derive_subject):
-  "tyt_biyoloji_hücre_bölünmesi" → "tyt_biyoloji"   (tyt/ayt varsa ilk 2 parça)
-  "coğrafya_türkiye_iklim"       → "coğrafya_türkiye" (uzun prefix → ilk 2 parça)
-  "felsefe_varoluş"              → "felsefe"           (kısa → ilk parça)
-```
+1. question_bank'taki tüm kc_id'leri çek (kaynak gerçek)
+   SELECT kc_id, count(*) FROM question_bank GROUP BY kc_id
+   → bank = {"tyt_felsefe": 188, "tyt_biyoloji": 245, ...}
 
-Her grup için question_bank'ta kaç soru var:
+2. Her bank kc_id için "çekirdek ders" türet (_core_subject):
+   "tyt_felsefe" → "felsefe"
+   "tyt_biyoloji" → "biyoloji"
+   bank_core_map = {"felsefe": "tyt_felsefe", "biyoloji": "tyt_biyoloji", ...}
 
-```sql
-SELECT count(*) FROM question_bank
-WHERE kc_id ILIKE '%tyt_biyoloji%'
+3. Öğrencinin mastery_scores kayıtları:
+   SELECT kc_id, p_mastery FROM mastery_scores WHERE learner_id = :lid
+
+4. Her mastery kc_id'yi bank'a eşle:
+   "felsefe_zor_konular_detayli" → core="felsefe" → bank_kc="tyt_felsefe" ✓
+   "matematik_turev_tanim"       → core="matematik" → bank_kc="tyt_matematik" ✓
+   "xyz_bilinmeyen"              → core="xyz" → bank'ta yok → question_count=0 ile listele
+
+5. Sonuç: tüm bank konuları + sadece mastery'de olan konular (soru sayısı 0)
 ```
 
 Sıralama:
 ```
-1. Sorusu olan konular önce (question_count > 0)
-2. İçinde: düşük mastery önce (önce çalışılması gerekenler)
+1. Sorusu olan konular önce → mastery yüksekten düşüğe (önce çalışılması gerekenler)
+2. Sorusu olmayan (sadece mastery'de) konular sona
 ```
 
-#### Yeni Öğrenci (hiç mastery yoksa — fallback)
-
-```sql
-SELECT kc_id, count(*)
-FROM question_bank
-GROUP BY kc_id
-ORDER BY kc_id
-```
-
-question_bank'taki tüm konular mastery=null olarak döner.
+**Yeni kullanıcı** (mastery yok): Sadece bank konuları mastery=null ile listelenir.
 
 ---
 
 ### 14.2 Soru Bankası Quiz — `GET /api/quiz/bank-quiz`
 
-Seçilen konudan rastgele soru çeker. **Embedding yok, LLM yok — saf SQL.**
+Seçilen konudan rastgele soru çeker ve `quiz_sessions`'a oturum kaydı oluşturur. **Embedding yok, LLM yok — saf SQL.**
 
 ```sql
+-- Sorular
 SELECT id, question_text, options
 FROM question_bank
 WHERE kc_id ILIKE '%tyt_biyoloji%'   -- ILIKE: büyük/küçük harf duyarsız, kısmi eşleşme
 ORDER BY random()                      -- Her seferinde farklı sorular
 LIMIT 10                               -- max 20
+
+-- Quiz session kaydı
+INSERT INTO quiz_sessions (id, learner_id, kc_id, status)
+VALUES (:session_id, :learner_id, :kc_id, 'active')
 ```
 
 - `ILIKE '%kc_id%'`: Tam eşleşme değil, içerme araması — `tyt_biyoloji_hücre` ve `tyt_biyoloji_mitoz` ikisi de `tyt_biyoloji` aramasına döner
 - `random()`: PostgreSQL'in rastgele sıralama fonksiyonu — her çağrıda farklı sorular gelir
 - Correct answer **frontend'e gönderilmez** (`BankQuestionOut` sadece question + options içerir — kopya çekmeyi önler)
+- `quiz_session_id` response'a eklenerek frontend'e döner; cevap gönderimde `quiz_answers` kaydı için kullanılır
 
 ---
 
@@ -1343,3 +1376,19 @@ Ortam değişkeni  >  config.json  >  .env dosyası  >  Varsayılan
 ---
 
 *Son güncelleme: Mayıs 2026 · Tüm bileşenler production'da aktif*
+
+---
+
+## Supabase Tablo Özeti
+
+| Tablo | Açıklama | Yazan | Okuyan |
+|---|---|---|---|
+| `student_profiles` | Öğrenci kimlik + preferences | ProfileRetriever | PromptBuilder, PedagogyPlanner |
+| `mastery_scores` | KC bazında bilgi seviyesi 0–1 | Worker (BKT update) | MasteryEstimator, QuizSubjects |
+| `curriculum_chunks` | PDF içerik parçaları + vektör | IngestionPipeline | ContentRetriever (RAG) |
+| `chat_history` | Her etkileşim özeti + vektör | Worker (InteractionLogger) | Memory RAG (top-3 cosine) |
+| `student_errors` | LLM tespit ettiği yanılgılar | Worker (MisconceptionStore) | PromptBuilder (aktif yanılgılar) |
+| `question_bank` | Admin'in yüklediği TYT/AYT soruları | Admin endpoint | BankQuiz, AdaptiveQuiz (few-shot) |
+| `quiz_sessions` | Quiz oturumu kaydı | BankQuiz + AdaptiveQuiz | QuizStore |
+| `quiz_questions` | LLM üretilen quiz soruları | AdaptiveQuiz | QuizStore |
+| `quiz_answers` | Öğrencinin cevapları | BankAnswer endpoint | QuizStore (skor hesaplama) |

@@ -219,11 +219,14 @@ class ChatOrchestrator:
             )
 
         # ── 10. Worker queue'ya iş gönder ─────────────────────────────
+        # content_summary: soru+yanıt özeti → Memory RAG geçmişte ne sorulduğunu VE
+        # ne açıklandığını birlikte görecek şekilde embed edilir
+        content_summary = f"S: {request.message[:500]}\nY: {llm_response.content[:1500]}"
         await self._worker_queue.push({
             "learner_id": str(request.learner_id),
             "session_id": str(request.session_id),
             "interaction_type": InteractionType.QUESTION.value,
-            "content_summary": request.message[:300],
+            "content_summary": content_summary,
             "kc_tags": kc_ids,
             "subject": subject,
             "misconceptions": [
@@ -233,7 +236,7 @@ class ChatOrchestrator:
             "new_mastery": new_mastery,
             "user_message": request.message,
             "assistant_response": llm_response.content,
-            "context_used": "\n".join([c.content[:200] for c in content_chunks])  # Sadece kısa özet
+            "context_used": "\n".join([c.content[:200] for c in content_chunks]),
         })
 
         logger.info(
@@ -379,11 +382,12 @@ class ChatOrchestrator:
                 correct=correct,
             )
 
+        content_summary = f"S: {request.message[:500]}\nY: {full_content[:1500]}"
         await self._worker_queue.push({
             "learner_id": str(request.learner_id),
             "session_id": str(request.session_id),
             "interaction_type": InteractionType.QUESTION.value,
-            "content_summary": request.message[:300],
+            "content_summary": content_summary,
             "kc_tags": kc_ids,
             "subject": subject,
             "misconceptions": [{"kc_id": kc_id, "description": desc} for kc_id, desc in detected_misconceptions],
