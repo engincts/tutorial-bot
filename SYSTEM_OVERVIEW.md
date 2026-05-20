@@ -38,7 +38,7 @@ Her öğrencinin bilgi seviyesini matematiksel modelle sürekli ölçer ve buna 
        │                  │                  │
 ┌──────▼──────┐  ┌────────▼──────┐  ┌───────▼────────┐
 │    Redis    │  │  PostgreSQL   │  │   Novita AI    │
-│ Oturum önb. │  │  (Supabase)   │  │ deepseek-v3.2  │
+│ Oturum önb. │  │  (Supabase)   │  │ gpt-oss-120b   │
 │ + İş kuyruğu│  │  + pgvector   │  │ + BGE-M3 embed │
 └──────┬──────┘  └───────────────┘  └────────────────┘
        │
@@ -58,6 +58,56 @@ Her öğrencinin bilgi seviyesini matematiksel modelle sürekli ölçer ve buna 
 | `worker` | Python 3.11 | — | Arka plan bellek güncelleme |
 | `redis` | Redis 7 | 6379 | Oturum + iş kuyruğu |
 | **Supabase** | PostgreSQL + Auth | — | Bulut DB + kimlik doğrulama |
+
+---
+
+## 2.1 Kullanılan Modeller
+
+Tüm model seçimleri `config.json` üzerinden yapılır; `.env` değişkenleri öncelik taşır.
+
+### LLM (Dil Modeli)
+
+| Parametre | Aktif Değer | Alternatifler |
+|---|---|---|
+| `llm.provider` | `novita` | `openai`, `anthropic` |
+| `llm.novita_model` | `openai/gpt-oss-120b` | — |
+| `llm.openai_model` | `gpt-4o` | (provider=openai seçilince) |
+| `llm.anthropic_model` | `claude-sonnet-4-5` | (provider=anthropic seçilince) |
+
+> LLM; sohbet yanıtı, mastery değerlendirmesi, misconception tespiti, doğruluk değerlendirmesi ve reflection üretimi için kullanılır.
+
+### Embedding Modeli
+
+| Parametre | Aktif Değer | Alternatifler |
+|---|---|---|
+| `embedder.provider` | `novita` | `bge_m3` (local), `openai` |
+| `embedder.novita_model` | `baai/bge-m3` | — |
+| `embedder.openai_model` | `text-embedding-3-large` | (provider=openai seçilince) |
+| `embedder.model` | `BAAI/bge-m3` | (provider=bge_m3 local seçilince) |
+| `embedder.dim` | `1024` | — |
+
+> BGE-M3, hem Content RAG hem Memory RAG için aynı embedding üretir; bir sorguda tek kez çağrılır.
+
+### Knowledge Tracing Modeli
+
+| Parametre | Aktif Değer | Kaynak | Alternatifler |
+|---|---|---|---|
+| `KT_MODEL` | `bkt` | `.env` (OS env — config.json'u ezer) | `akt`, `dkt` |
+| `knowledge_tracing.model_path` | `./checkpoints/akt_assistments.pt` | `config.json` | — |
+
+> `.env` → docker-compose `env_file` → OS env olarak yüklenir → Pydantic öncelik sırası: OS env > config.json > .env dosyası.  
+> Soft-BKT update formülü tüm modellerde ortaktır: `p_new = p_old + 0.2 × (llm_score − p_old)`
+
+### Vision Modeli (Soru Bankası Çıkarımı)
+
+| Parametre | Değer | Kullanım |
+|---|---|---|
+| Model | `qwen/qwen3-vl-235b-a22b-instruct` | Novita AI üzerinden |
+| Provider | Novita AI (OpenAI uyumlu API) | — |
+| Script | `scripts/ingest_question_bank.py` | — |
+
+> Sadece veri hazırlama aşamasında kullanılır (PDF → soru bankası). Runtime'da çağrılmaz.  
+> PDF sayfaları JPEG'e dönüştürülür → base64 → vision model → JSON soru listesi çıkarılır.
 
 ---
 
@@ -311,99 +361,193 @@ Hata yönetimi: 3 deneme, bekleme 2s → 4s → 8s
 
 ---
 
-## 7. Bilgi Takibi Algoritmaları
+## 7. Puanlama ve Bilgi Takibi Algoritması
 
-### 7.1 BKT — Bayesian Knowledge Tracing
+### 7.0 Genel Akış — İki Farklı Yol
 
-Eğitim teknolojisinin akademik standardı. Her konu için **bağımsız** probabilistik model çalışır.
-
-#### Parametreler
-
-| Parametre | Simge | Değer | Anlamı |
-|---|---|---|---|
-| Başlangıç bilgisi | P(L₀) | 0.10 | Öğrenci konuyu zaten biliyor olasılığı |
-| Öğrenme | P(T) | 0.15 | Her etkileşimde yeni bilgi kazanma olasılığı |
-| Kayma (Slip) | P(S) | 0.10 | Bildiği hâlde yanlış yapma olasılığı |
-| Tahmin (Guess) | P(G) | 0.20 | Bilmediği hâlde doğru yapma olasılığı |
-| Unutma | P(F) | 0.02 | Doğru yaptıktan sonra bilgiyi yitirme olasılığı |
-
-#### Güncelleme Adımları (Her Etkileşimde)
-
-**Adım 1 — Bayes Posterior:**  
-Gözlem (doğru/yanlış) geldikten sonra "öğrenci gerçekten biliyor mu?" sorusu güncellenir.
+Sistemde mastery güncellemesi **sohbet** ve **quiz** olmak üzere iki farklı yoldan tetiklenir:
 
 ```
-Doğru cevap geldi:
-  P(L | doğru) = P(L) × (1 - P(S))  /  [P(L)×(1-P(S)) + (1-P(L))×P(G)]
+┌──────────────────────────────────────────────────────────────────────┐
+│ YOL A: SOHBET (chat)                                                 │
+│                                                                      │
+│  Kullanıcı mesajı                                                    │
+│       │                                                              │
+│       ▼                                                              │
+│  LLM yanıt üretir                                                    │
+│       │                                                              │
+│       ▼  [paralel]                                                   │
+│  CorrectnessEvaluator ─── LLM sınıflandırır ──► True / False / None │
+│       │                                                              │
+│       ├─ True/False → BKT binary update → new_mastery               │
+│       └─ None       → new_mastery = None (LLM değerlendiremiyor)    │
+│       │                                                              │
+│       ▼                                                              │
+│  Worker kuyruğuna gönder (new_mastery ile birlikte)                 │
+│       │                                                              │
+│       ▼  [arka planda]                                               │
+│  new_mastery varsa: doğrudan kullan                                  │
+│  new_mastery yoksa: LLMMasteryEvaluator → {kc_id: 0.0–1.0}         │
+│       │                                                              │
+│       ▼                                                              │
+│  Soft-BKT formülü → kc_mastery tablosuna UPSERT                     │
+└──────────────────────────────────────────────────────────────────────┘
 
-Yanlış cevap geldi:
-  P(L | yanlış) = P(L) × P(S)  /  [P(L)×P(S) + (1-P(L))×(1-P(G))]
+┌──────────────────────────────────────────────────────────────────────┐
+│ YOL B: QUIZ (soru bankası)                                           │
+│                                                                      │
+│  Öğrenci şık seçer                                                   │
+│       │                                                              │
+│       ▼                                                              │
+│  selected_answer == correct_answer → is_correct: bool               │
+│       │                                                              │
+│       ▼                                                              │
+│  BKT binary update → new_mastery                                     │
+│       │                                                              │
+│       ▼                                                              │
+│  Worker → Soft-BKT formülü → kc_mastery UPSERT                      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
-
-**Adım 2 — Öğrenme Geçişi:**  
-Posterior'a öğrenme olasılığı eklenerek bir sonraki adım için ön tahmin yapılır.
-
-```
-P(L_yeni) = P(L | gözlem) + (1 - P(L | gözlem)) × P(T)
-```
-
-Bu iki adım birleşince mastery asla sıfırlanmaz, ani sıçramalar olmaz, her yeni etkileşimle kademeli ilerler.
-
-#### Chat Modu: Soft Update
-
-Quiz'deki gibi binary (doğru/yanlış) değil, LLM'den gelen 0.0–1.0 güven skoru kullanılır:
-
-```python
-# LLM: "Bu öğrenci konuyu %70 anlıyor" → confidence = 0.7
-p_mastery_new = p_mastery_old + learning_rate × (confidence − p_mastery_old)
-# learning_rate = 0.2  (kararlılık için düşük tutulur)
-```
-
-**Sonuç:** Her etkileşimden küçük, kararlı bir adım. 5 doğru soru ile mastery birdenbire 1.0 olmaz.
 
 ---
 
-### 7.2 AKT — Attentive Knowledge Tracing
+### 7.1 BKT — Bayesian Knowledge Tracing (Aktif Model)
 
-BKT'ye alternatif, daha yakın tarihli etkileşimlere daha fazla ağırlık veren model.
+> **Aktif model:** `bkt` (`.env → KT_MODEL=bkt`, OS env olarak yükleniyor)
 
-#### Temel Fark: Zamansal Dikkat (Attention Decay)
+Her konu (KC) için bağımsız probabilistik bir Hidden Markov Model çalıştırır.
+
+#### BKT Parametreleri
+
+| Parametre | Simge | Değer | Anlamı |
+|---|---|---|---|
+| Başlangıç bilgisi | P(L₀) | 0.10 | Yeni konu için prior — %10 biliyor olasılığı |
+| Öğrenme | P(T) | 0.15 | Her etkileşimde öğrenme olasılığı |
+| Kayma (Slip) | P(S) | 0.10 | Biliyor ama yanlış yapma olasılığı |
+| Tahmin (Guess) | P(G) | 0.20 | Bilmiyor ama doğru yapma olasılığı |
+| Unutma | P(F) | 0.02 | Yanlış sonrası hafif düşüş oranı |
+| Alt sınır | — | 0.01 | Mastery asla 0 olmaz |
+| Üst sınır | — | 0.99 | Mastery asla 1 olmaz |
+
+#### Binary Güncelleme (Quiz — Kesin Doğru/Yanlış)
+
+```
+Adım 1: Bayes Posterior — gözleme göre "gerçekten biliyor mu?" güncelle
+
+  Doğru cevap:
+    P(L | ✓) = P(L) × (1 − P(S))
+               ─────────────────────────────────────
+               P(L)×(1−P(S))  +  (1−P(L))×P(G)
+
+  Yanlış cevap:
+    P(L | ✗) = P(L) × P(S)
+               ─────────────────────────────────────
+               P(L)×P(S)  +  (1−P(L))×(1−P(G))
+
+Adım 2: Öğrenme Geçişi — bir sonraki adım için ön tahmin
+
+  P(L_yeni) = P(L | gözlem)  +  (1 − P(L | gözlem)) × P(T)
+
+Adım 3: Yanlış ise unutma uygula
+
+  P(L_yeni) = P(L_yeni) × (1 − P(F))
+
+Adım 4: Clamp → [0.01, 0.99]
+
+Sayısal örnek (p_old=0.30, doğru cevap):
+  posterior = 0.30×0.90 / (0.30×0.90 + 0.70×0.20) = 0.27 / 0.41 = 0.659
+  p_new     = 0.659 + (1 − 0.659) × 0.15             = 0.659 + 0.051 = 0.710
+```
+
+#### Soft Güncelleme (Sohbet — LLM Güven Skoru)
+
+Sohbet ortamında kesin doğru/yanlış yerine `confidence ∈ [0.0, 1.0]` kullanılır:
+
+```
+P(obs|L)   = confidence × (1−P(S))  +  (1−confidence) × P(S)
+P(obs|¬L)  = confidence × P(G)      +  (1−confidence) × (1−P(G))
+
+posterior = P(obs|L) × P(L)  /  [P(obs|L)×P(L) + P(obs|¬L)×(1−P(L))]
+
+effective_learn = P(T) × confidence
+P(L_yeni) = posterior + (1 − posterior) × effective_learn
+
+confidence < 0.3 → P(L_yeni) = P(L_yeni) × (1 − P(F))  [hafif unutma]
+```
+
+---
+
+### 7.2 LLMMasteryEvaluator — Sohbetten Skor Üretme
+
+BKT'nin `correct: bool` bilgisine ihtiyacı var. Sohbette bu her zaman bilinmez.  
+`LLMMasteryEvaluator`, öğrenci mesajı + eğitmen yanıtını okuyarak her KC için 0.0–1.0 arası skor üretir.
+
+```
+Giriş:
+  user_message:       "Yani türev fonksiyonun eğimini mi veriyor?"
+  assistant_response: "Evet, türev f'(x) anlık değişim hızıdır..."
+  kc_ids:             ["matematik_turev_tanim", "matematik_turev_yorum"]
+  current_mastery:    {"matematik_turev_tanim": 0.55, ...}
+
+LLM'e gönderilen prompt (temperature=0, max_tokens=100):
+  "Öğrencinin bu konulardaki bilgi seviyesini 0.0–1.0 ile puanla.
+   SADECE JSON döndür: {kc_id: skor}"
+
+LLM çıktısı:
+  {"matematik_turev_tanim": 0.75, "matematik_turev_yorum": 0.60}
+```
+
+---
+
+### 7.3 Soft-BKT Persist Formülü (Worker)
+
+BKT skoru veya LLM skoru ne olursa olsun, `kc_mastery` tablosuna yazılmadan önce bir son yumuşatma adımı uygulanır:
+
+```
+learning_rate = 0.20
+
+p_new = p_old + learning_rate × (score − p_old)
+p_new = clamp(p_new, 0.01, 0.99)
+
+Örnekler:
+  p_old=0.30, score=0.75 → p_new = 0.30 + 0.20×(0.75−0.30) = 0.39
+  p_old=0.55, score=0.75 → p_new = 0.55 + 0.20×(0.75−0.55) = 0.59
+  p_old=0.80, score=0.20 → p_new = 0.80 + 0.20×(0.20−0.80) = 0.68
+```
+
+> Ani sıçramayı engeller. Tek bir doğru cevap mastery'yi 0.3→0.99 yapmaz; kademeli ilerler.
+
+---
+
+### 7.4 AKT — Attentive Knowledge Tracing (Alternatif)
+
+> config.json'da `akt` seçildiğinde aktif olur, `.env`'deki `KT_MODEL=bkt` bunu ezer.
+
+BKT'den farkı: yakın zamanlı etkileşimlere daha fazla ağırlık verir.
 
 ```
 decay_factor = 0.94
 
 Ağırlıklar (en yeniden eskiye):
-  son etkileşim  → 1.0
-  2. etkileşim   → 0.94
-  3. etkileşim   → 0.94² = 0.88
-  ...
-  N. etkileşim  → 0.94^(N-1)
-```
+  son etkileşim → 1.0
+  2. etkileşim  → 0.94
+  3. etkileşim  → 0.94² = 0.88
+  N. etkileşim  → 0.94^(N−1)
 
-Yani 1 hafta önce çözülen soru bugünkü kadar etkili değil. Unutma davranışını daha gerçekçi modeller.
-
-#### Güven Ölçekleme
-
-Ne kadar çok denenirse tahmin o kadar güvenilir olur:
-
-```
-confidence = 1 - e^(−attempts / α)    α = 12.0
-
-attempts = 1  → confidence = 0.08  (çok belirsiz)
-attempts = 6  → confidence = 0.39  (orta)
-attempts = 12 → confidence = 0.63  (güvenilir)
-attempts = 24 → confidence = 0.86  (çok güvenilir)
+Güven ölçeği (denemeler arttıkça daha güvenilir):
+  confidence = 1 − e^(−attempts / 12.0)
+  attempts=1  → 0.08   attempts=12 → 0.63   attempts=24 → 0.86
 ```
 
 ---
 
-### 7.3 Mastery Seviyeleri ve Pedagoji Eşikleri
+### 7.5 Mastery Seviyeleri ve Pedagoji Eşikleri
 
-| p_mastery | Seviye | Renk | Pedagoji Modu |
+| p_mastery | Seviye | UI Rengi | Pedagoji Modu |
 |---|---|---|---|
-| 0.00 – 0.40 | Başlangıç | 🔴 Kırmızı | Reinforcement |
-| 0.40 – 0.70 | Gelişiyor | 🟡 Sarı | Practice |
-| 0.70 – 1.00 | Uzman | 🟢 Yeşil | Challenge |
+| 0.00 – 0.40 | Başlangıç | Kırmızı | Reinforcement — temel kavramları pekiştir |
+| 0.40 – 0.70 | Gelişiyor | Sarı | Practice — alıştırma ve uygulama |
+| 0.70 – 1.00 | Uzman | Yeşil | Challenge — zorlu sorular ve derinleştirme |
 
 ---
 
@@ -444,51 +588,6 @@ tyt_biyoloji_hücre_bölünmesi
  │       └────────────── Konu
  └────────────────────── Ders (tyt/ayt/coğrafya/felsefe/...)
 ```
-
----
-
-## 9. LLM Mastery Evaluator
-
-Her chat etkileşiminden sonra öğrencinin kavrayışını LLM ile puanlar.
-
-### Giriş
-
-```
-user_message:       "Yani türev bir fonksiyonun eğimini mi veriyor?"
-assistant_response: "Evet tam olarak, türev f'(x) noktasındaki anlık değişim hızıdır..."
-kc_ids:             ["matematik_turev_tanim", "matematik_turev_yorum"]
-current_mastery:    {"matematik_turev_tanim": 0.55, "matematik_turev_yorum": 0.30}
-```
-
-### LLM'e Gönderilen Prompt
-
-```
-Öğrencinin anladığı konular için 0.0–1.0 arası skor ver.
-0.0 = hiç anlamıyor, 0.5 = kısmen anlıyor, 1.0 = tam anlıyor.
-Sadece JSON döndür: {"kc_id": skor, ...}
-```
-
-### Çıkış
-
-```json
-{
-  "matematik_turev_tanim": 0.75,
-  "matematik_turev_yorum": 0.60
-}
-```
-
-### BKT ile Birleşim
-
-```
-BKT soft update ile uygulanır:
-  p_new = p_old + 0.2 × (llm_score − p_old)
-
-Örnek:
-  p_old = 0.55, llm_score = 0.75
-  p_new = 0.55 + 0.2 × (0.75 − 0.55) = 0.55 + 0.04 = 0.59
-```
-
-Her etkileşim mastery'yi küçük adımlarla ilerletir.
 
 ---
 
@@ -740,18 +839,35 @@ LLM'in "kendi bilgisiyle" değil, **sisteme yüklenen ders içerikleriyle** ceva
 ```
 1. PDF / doküman  →  /api/upload  endpoint'ine gönderilir
         ↓
-2. ingestion_pipeline.py metni ayıklar, ~500 token chunk'lara böler
-   Her chunk:  heading (başlık), content (metin), kc_tags (konu etiketleri)
+2. ingestion_pipeline.py → IngestionPipeline.ingest_pdf()
+   pypdf ile sayfa sayfa metin çıkarılır, sayfalar \n\n ile birleştirilir
         ↓
-3. Her chunk BGE-M3 (BAAI/bge-m3) ile embed edilir
-   → 1024-boyutlu float vektör üretilir
+3. Chunker.chunk(text)  [max_chars=1500, overlap_chars=150]
+   ┌─ Adım 1: Markdown başlıklarında böl (h1/h2/h3)
+   │           Her başlık → ayrı bölüm + heading etiketi
+   ├─ Adım 2: Bölüm > 1500 karakter ise paragraflara böl (\n\n sınırı)
+   │           Paragraf > 1500 karakter ise cümlelere böl (.!? sınırı)
+   └─ Adım 3: Overlap uygula
+               Her chunk'ın başına önceki chunk'ın son 150 karakteri eklenir
+               → Bağlamın chunk sınırında kopmaması için
         ↓
-4. curriculum_chunks tablosuna INSERT
-   { document_id, chunk_index, content, embedding, kc_tags, metadata }
+4. embed_batch() — tüm chunk'lar tek API çağrısıyla embed edilir
+   BGE-M3 (baai/bge-m3, Novita) → 1024-boyutlu float vektör
         ↓
-5. HNSW index otomatik güncellenir (m=16, ef_construction=64)
+5. curriculum_chunks tablosuna INSERT
+   { document_id, chunk_index, content, embedding, kc_tags, metadata{heading} }
+        ↓
+6. HNSW index otomatik güncellenir (m=16, ef_construction=64)
    → cosine search O(log n) hızında çalışır
 ```
+
+**Chunker parametreleri:**
+
+| Parametre | Değer | Açıklama |
+|---|---|---|
+| `max_chars` | 1500 | Bir chunk'ın maksimum karakter uzunluğu |
+| `overlap_chars` | 150 | Her chunk'a önceki chunk'tan eklenen örtüşme |
+| Bölme önceliği | başlık → paragraf → cümle | Yapıya saygılı hiyerarşik bölme |
 
 ---
 
