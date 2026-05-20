@@ -553,40 +553,108 @@ Güven ölçeği (denemeler arttıkça daha güvenilir):
 
 ## 8. KC Mapper — Konu Çıkarımı
 
-Her kullanıcı mesajından hangi konuların sorulduğunu çıkaran bileşen.
+Her kullanıcı mesajından hangi konuların sorulduğunu tespit eden bileşen.  
+Çıkardığı KC ID'ler sistemin geri kalanı için merkezi bir anahtar görevi görür.
 
-### Nasıl Çalışır?
-
-```
-Kullanıcı: "Türkiye'nin iklim kuşakları nelerdir?"
-            │
-            ▼
-LLM'e gönderilir (system prompt ile):
-  "Bu sorudan konu kodları çıkar.
-   Format: {ders}_{konu}_{kavram}
-   Mevcut dersler: tyt_biyoloji, tyt_fizik, ...
-   Maksimum 4 kod döndür."
-            │
-            ▼
-LLM döndürür:
-  ["coğrafya_iklim_kuşaklar", "coğrafya_türkiye_fiziki_coğrafya"]
-```
-
-### Fallback (LLM Erişilemezse)
-
-Anahtar kelime eşleştirme devreye girer:
-- "türev", "integral", "limit" → `matematik_*`
-- "hücre", "DNA", "protein" → `biyoloji_*`
-- Eşleşme yoksa → boş liste döner, genel prompt kullanılır
-
-### Konu Kodu Formatı
+### 8.1 KC Kimliği Nedir?
 
 ```
-tyt_biyoloji_hücre_bölünmesi
- │       │          │
- │       │          └── Kavram (opsiyonel)
- │       └────────────── Konu
- └────────────────────── Ders (tyt/ayt/coğrafya/felsefe/...)
+tyt_biyoloji_hucre_bolunmesi
+ │       │         │
+ │       │         └── Kavram (opsiyonel, alt çizgiyle ayrılır)
+ │       └──────────── Konu
+ └──────────────────── Ders önek (tyt / ayt / matematik / fizik / ...)
+
+Kurallar:
+  - Küçük harf, Türkçe karakter yok (ü→u, ş→s, ğ→g, ç→c, ı→i, ö→o)
+  - Kelimeler arası: _ (alt çizgi)
+  - Maksimum 4 KC ID üretilir (max_kc_per_query=4)
+```
+
+### 8.2 LLM ile Çıkarım (Ana Yol)
+
+```
+Kullanıcı: "Türev zincir kuralı nasıl uygulanır?"
+                    │
+                    ▼
+    DB'den tüm ders adları çekilir → course_names
+    ["matematik", "fizik", "biyoloji", "turkce", ...]
+                    │
+                    ▼
+    LLM'e gönderilir (temperature=0.1, max_tokens=1000):
+      System: "Mesajdaki akademik konuyu JSON array olarak döndür.
+               Format: {ders}_{konu}_{kavram}
+               Sistemde yüklü dersler: matematik, fizik, ...
+               Sadece JSON array, başka hiçbir şey yazma."
+      User:   "Metin: Türev zincir kuralı nasıl uygulanır?"
+                    │
+                    ▼
+    LLM döndürür (raw JSON):
+      ["matematik_turev_zincir_kurali"]
+                    │
+                    ▼
+    Temizleme: [^a-z0-9_] → "_"  (güvenli karakter seti)
+    Sınırlama: ilk 4 eleman alınır
+```
+
+### 8.3 Keyword Fallback (LLM Boş Yanıt Verirse)
+
+LLM boş yanıt döndürürse veya erişilemezse, sabit keyword haritasına bakılır:
+
+| Konu | Anahtar Kelimeler |
+|---|---|
+| `tyt_matematik` | matematik, sayı, cebir, geometri, denklem, fonksiyon |
+| `tyt_fizik` | fizik, kuvvet, hareket, enerji, elektrik, newton |
+| `tyt_kimya` | kimya, atom, element, asit, baz, mol |
+| `tyt_biyoloji` | biyoloji, hücre, canlı, solunum, genetik, evrim |
+| `tyt_turkce` | türkçe, dilbilgisi, paragraf, sözcük, yazım |
+| `tyt_tarih` | tarih, osmanlı, atatürk, inkılap, cumhuriyet |
+| `tyt_cografya` | coğrafya, iklim, harita, nüfus, kıta |
+| `tyt_felsefe` | felsefe, mantık, etik, ahlak, epistemoloji |
+
+Eşleşirse → `{course_id}_genel` üretilir (örn. `tyt_fizik_genel`).  
+Eşleşme yoksa → boş liste, konu etiketsiz genel prompt kullanılır.
+
+### 8.4 Sistemdeki Kullanım Alanları
+
+Çıkarılan KC ID'ler aynı request döngüsünde 5 farklı yerde kullanılır:
+
+```
+KC ID'ler → ["matematik_turev_zincir_kurali"]
+             │
+             ├── [1] Content RAG filtresi
+             │     curriculum_chunks WHERE kc_tags && ARRAY[kc_ids]
+             │     → Sadece bu konuyla etiketlenmiş içerik getirilir
+             │
+             ├── [2] Mastery yükleme
+             │     kc_mastery WHERE kc_id IN (kc_ids)
+             │     → Bu konulardaki mevcut bilgi seviyeleri alınır
+             │
+             ├── [3] Misconception filtresi
+             │     student_errors WHERE kc_id IN (kc_ids) AND resolved=false
+             │     → Bu konulardaki çözülmemiş yanılgılar prompt'a eklenir
+             │
+             ├── [4] Session bağlamı (aktif konu takibi)
+             │     ctx.active_kc_ids güncellenir
+             │     → Sonraki request'te known_kc_ids olarak kullanılır
+             │
+             └── [5] Mastery güncelleme (etkileşim sonrası)
+                   BKT update + kc_mastery UPSERT
+                   chat_history.kc_tags olarak kaydedilir
+```
+
+### 8.5 Session Bağlamı — KC ID'ler Nasıl Taşınır?
+
+```
+Request 1: "Türev nedir?"
+  → KC Mapper: ["matematik_turev_tanim"]
+  → ctx.active_kc_ids = ["matematik_turev_tanim"]
+
+Request 2: "Peki zincir kuralı?"  ← bağlam yok, tek başına anlamsız
+  → KC Mapper: []  (soru çok kısa, konu çıkaramıyor)
+  → Ama known_kc_ids = ["matematik_turev_tanim"]  (session'dan geliyor)
+  → Sonuç: kc_ids = known + extracted = ["matematik_turev_tanim"]
+  → Content RAG hâlâ türev konusundan içerik getirir ✓
 ```
 
 ---
