@@ -178,12 +178,17 @@ export const quiz = {
     return res.json();
   },
   // Cevap gönder ve doğruluk kontrol et
-  submitBankAnswer: async (questionId, kcId, selectedAnswer) => {
+  submitBankAnswer: async (questionId, kcId, selectedAnswer, quizSessionId = null) => {
     const token = await freshToken();
     const res = await fetch(`${BASE}/quiz/bank-answer`, {
       method: "POST",
       headers: authHeaders(token),
-      body: JSON.stringify({ question_id: questionId, kc_id: kcId, selected_answer: selectedAnswer }),
+      body: JSON.stringify({
+        question_id: questionId,
+        kc_id: kcId,
+        selected_answer: selectedAnswer,
+        quiz_session_id: quizSessionId,
+      }),
     });
     if (!res.ok) throw new Error("Cevap gönderilemedi.");
     return res.json();

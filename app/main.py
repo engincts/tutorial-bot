@@ -34,7 +34,11 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Tutor Bot | env=%s | llm=%s", settings.app_env, settings.llm_provider)
     init_db(settings)
     init_redis(settings)
-    logger.info("Database and Redis initialized")
+
+    from app.infrastructure.database import get_engine, Base
+    async with get_engine().begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables ensured (create_all)")
     _ready = True
     yield
     _ready = False

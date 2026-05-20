@@ -127,6 +127,7 @@ class BankQuestionOut(BaseModel):
 
 class BankQuizOut(BaseModel):
     kc_id: str
+    quiz_session_id: str
     questions: list[BankQuestionOut]
 
 
@@ -134,6 +135,7 @@ class BankAnswerRequest(BaseModel):
     question_id: uuid.UUID
     kc_id: str
     selected_answer: str
+    quiz_session_id: uuid.UUID | None = None
 
 
 class BankAnswerOut(BaseModel):
@@ -232,7 +234,7 @@ async def get_bank_quiz(
     learner_id: uuid.UUID = Depends(get_current_learner_id),
     db: AsyncSession = Depends(get_session),
 ):
-    """question_bank'tan rastgele soru çeker."""
+    """question_bank'tan rastgele soru çeker ve quiz_sessions'a kayıt oluşturur."""
     from sqlalchemy import text
 
     rows = await db.execute(
@@ -257,7 +259,17 @@ async def get_bank_quiz(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Bu konu için soru bulunamadı.")
 
-    return BankQuizOut(kc_id=kc_id, questions=questions)
+    # Quiz session kaydı oluştur
+    from app.infrastructure.quiz_store import QuizSessionORM
+    session_id = uuid.uuid4()
+    db.add(QuizSessionORM(
+        id=session_id,
+        learner_id=learner_id,
+        kc_id=kc_id,
+        status="active",
+    ))
+
+    return BankQuizOut(kc_id=kc_id, quiz_session_id=str(session_id), questions=questions)
 
 
 @router.post("/bank-answer", response_model=BankAnswerOut)
@@ -283,13 +295,38 @@ async def submit_bank_answer(
     is_correct = req.selected_answer.strip() == correct_answer.strip()
 
     # quiz_answers tablosuna kayıt at
-    from app.infrastructure.quiz_store import QuizAnswerORM
+    from sqlalchemy import text as sa_text
+    from app.infrastructure.quiz_store import QuizAnswerORM, QuizSessionORM
+    effective_quiz_id = req.quiz_session_id or req.question_id
     db.add(QuizAnswerORM(
-        quiz_id=req.question_id,
+        quiz_id=effective_quiz_id,
         question_id=req.question_id,
         learner_answer=req.selected_answer,
         is_correct=is_correct,
     ))
+
+    # quiz_sessions skorunu güncelle (bank quiz için)
+    if req.quiz_session_id:
+        score_row = await db.execute(
+            sa_text("""
+                SELECT COUNT(*) as total,
+                       SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct
+                FROM quiz_answers
+                WHERE quiz_id = CAST(:qid AS UUID)
+            """).bindparams(qid=str(req.quiz_session_id))
+        )
+        sr = score_row.first()
+        # +1 çünkü yeni cevap henüz flush edilmedi (autoflush=False)
+        total = int(sr[0] or 0) + 1
+        correct_count = int(sr[1] or 0) + (1 if is_correct else 0)
+        running_score = round(correct_count / total * 100, 1)
+        await db.execute(
+            sa_text("""
+                UPDATE quiz_sessions
+                SET score = :score, status = 'in_progress'
+                WHERE id = CAST(:sid AS UUID)
+            """).bindparams(score=running_score, sid=str(req.quiz_session_id))
+        )
 
     # Mastery güncelle (arka planda)
     from app.domain.interaction import Interaction, InteractionType

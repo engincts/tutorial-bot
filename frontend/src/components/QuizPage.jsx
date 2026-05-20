@@ -82,7 +82,7 @@ function SubjectPicker({ subjects, loading, onStart }) {
 }
 
 // ── Quiz oyunu ────────────────────────────────────────────────
-function QuizGame({ kcId, questions, onFinish }) {
+function QuizGame({ kcId, quizSessionId, questions, onFinish }) {
   const [idx, setIdx] = useState(0);
   const [feedback, setFeedback] = useState(null);
   const [score, setScore] = useState(0);
@@ -95,7 +95,7 @@ function QuizGame({ kcId, questions, onFinish }) {
     if (feedback || loading) return;
     setLoading(true);
     try {
-      const res = await quiz.submitBankAnswer(q.question_id, kcId, opt);
+      const res = await quiz.submitBankAnswer(q.question_id, kcId, opt, quizSessionId);
       setFeedback({ ...res, selected: opt });
       if (res.is_correct) setScore((s) => s + 1);
     } catch {
@@ -202,7 +202,7 @@ export default function QuizPage({ auth }) {
     setLoadingQuiz(true);
     try {
       const data = await quiz.getBankQuiz(subject.kc_id, count);
-      setActiveQuiz({ kcId: data.kc_id, label: subject.label, questions: data.questions });
+      setActiveQuiz({ kcId: data.kc_id, quizSessionId: data.quiz_session_id, label: subject.label, questions: data.questions });
       setResult(null);
     } catch (err) {
       alert(err.message || "Sorular yüklenemedi.");
@@ -239,6 +239,7 @@ export default function QuizPage({ auth }) {
     return (
       <QuizGame
         kcId={activeQuiz.kcId}
+        quizSessionId={activeQuiz.quizSessionId}
         questions={activeQuiz.questions}
         onFinish={handleFinish}
       />
